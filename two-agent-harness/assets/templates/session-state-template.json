@@ -1,0 +1,33 @@
+{
+  "session_number": 1,
+  "started_at": "TIMESTAMP",
+  "last_action": "Project initialized",
+  "last_action_at": "TIMESTAMP",
+  "last_feature_id": null,
+  "agent_type": "initializer",
+  "status": "active",
+  "heartbeat": {
+    "enabled": true,
+    "interval_seconds": 300,
+    "last_heartbeat": "TIMESTAMP"
+  },
+  "current_activity": {
+    "feature_id": null,
+    "started_at": null,
+    "status": "idle",
+    "files_modified": []
+  },
+  "metrics": {
+    "total_features_this_session": 0,
+    "total_commits_this_session": 0,
+    "total_tests_run": 0,
+    "average_feature_time_minutes": 0,
+    "test_pass_rate": 100
+  },
+  "notes": {
+    "project_context": "",
+    "critical_constraints": [],
+    "implementation_summary": "",
+    "next_session_priorities": []
+  }
+}

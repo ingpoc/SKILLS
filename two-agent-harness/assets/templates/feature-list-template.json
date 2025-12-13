@@ -1,0 +1,51 @@
+{
+  "project_name": "PROJECT_NAME",
+  "purpose_document": ".claude/progress/PURPOSE.md",
+  "task_type": "new_feature",
+  "total_features": 0,
+  "completed": 0,
+  "pending": 0,
+  "in_progress": 0,
+  "blocked": 0,
+  "created_at": "2025-01-08T00:00:00Z",
+  "last_updated": "2025-01-08T00:00:00Z",
+  "categories": {
+    "foundation": {
+      "priority": "high",
+      "total": 0,
+      "features": []
+    },
+    "core": {
+      "priority": "high",
+      "total": 0,
+      "features": []
+    },
+    "features": {
+      "priority": "medium",
+      "total": 0,
+      "features": []
+    },
+    "integration": {
+      "priority": "medium",
+      "total": 0,
+      "features": []
+    },
+    "testing": {
+      "priority": "medium",
+      "total": 0,
+      "features": []
+    },
+    "documentation": {
+      "priority": "low",
+      "total": 0,
+      "features": []
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "team": {
+      "initializer": "Claude",
+      "coder": "Claude"
+    }
+  }
+}
