@@ -1,0 +1,22 @@
+2024-01-15 10:00:01 INFO Starting application server
+2024-01-15 10:00:02 DEBUG Database connection established
+2024-01-15 10:00:03 INFO Server listening on port 8000
+2024-01-15 10:00:10 DEBUG Processing request GET /api/users
+2024-01-15 10:00:11 INFO Request processed successfully
+2024-01-15 10:00:15 ERROR Database query failed: Connection timeout
+2024-01-15 10:00:16 WARN Retrying database connection
+2024-01-15 10:00:17 INFO Database connection restored
+2024-01-15 10:00:20 DEBUG Processing request POST /api/orders
+2024-01-15 10:00:21 ERROR Invalid order data: Missing required field 'user_id'
+2024-01-15 10:00:22 INFO Request rejected: Validation error
+2024-01-15 10:00:25 DEBUG Processing request GET /api/products
+2024-01-15 10:00:26 INFO Retrieved 150 products
+2024-01-15 10:00:30 ERROR Authentication failed: Invalid token
+2024-01-15 10:00:31 WARN IP blocked due to failed attempts
+2024-01-15 10:00:35 CRITICAL System memory usage above 90%
+2024-01-15 10:00:36 ERROR Cannot allocate memory for request
+2024-01-15 10:00:40 INFO Memory usage normalized to 75%
+2024-01-15 10:00:45 DEBUG Cache hit for key: user:12345
+2024-01-15 10:00:50 ERROR External API timeout: payment_gateway
+2024-01-15 10:00:51 WARN Using fallback payment processor
+2024-01-15 10:00:55 INFO Order processed successfully with fallback

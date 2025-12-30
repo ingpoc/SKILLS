@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>test-determinism</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #F0F8F8;
+      --charcoal: #0A1A1A;
+      --foam: #F0F8F8;
+      --deep: #0A1A1A;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--charcoal);
+      color: var(--cream);
+      overflow-x: hidden;
+    }
+
+    /* Custom Cursor */
+    .cursor-ring {
+      position: fixed;
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--cream);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      mix-blend-mode: difference;
+      display: none;
+    }
+
+    .cursor-dot {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      background: var(--cream);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      mix-blend-mode: difference;
+      display: none;
+    }
+
+    @media (pointer: fine) {
+      .cursor-ring, .cursor-dot { display: block; }
+    }
+
+    /* Progress Bar */
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #F0F8F8, #F0F8F8cc);
+      transform-origin: left;
+      transform: scaleX(0);
+      z-index: 1000;
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+      background: var(--charcoal);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-content {
+      text-align: center;
+      max-width: 900px;
+      z-index: 2;
+      position: relative;
+    }
+
+    .hero-title {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(3rem, 8vw, 7rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 30px;
+      color: var(--cream);
+    }
+
+    .hero-title .line { display: block; }
+    .hero-title .word {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(30px);
+      margin: 0 0.1em;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(1rem, 2vw, 1.5rem);
+      color: rgba(250, 249, 245, 0.8);
+      font-weight: 300;
+      line-height: 1.6;
+      margin-bottom: 50px;
+      opacity: 0;
+    }
+
+    .scroll-indicator {
+      position: absolute;
+      bottom: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+    }
+
+    .scroll-indicator span {
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(250, 249, 245, 0.6);
+    }
+
+    .scroll-line {
+      width: 1px;
+      height: 60px;
+      background: linear-gradient(to bottom, var(--cream), transparent);
+    }
+
+    @keyframes scroll-bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(10px); }
+    }
+
+    /* Chapter Sections */
+    .chapter {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 80px 60px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .chapter.light { background: var(--foam); color: var(--deep); }
+    .chapter.dark { background: var(--deep); color: var(--foam); }
+
+    .chapter-number {
+      position: absolute;
+      top: 60px;
+      left: 60px;
+      font-size: 3rem;
+      font-weight: 300;
+      opacity: 0.15;
+      font-family: 'Instrument Serif', serif;
+    }
+
+    .chapter-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .chapter.dark .chapter-inner.reverse {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .chapter-content {
+      /* Initial state handled by GSAP */
+    }
+
+    .chapter-label {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      opacity: 0.6;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    .chapter-title {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+      margin-bottom: 25px;
+    }
+
+    .chapter-description {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      opacity: 0.85;
+    }
+
+    .chapter-description p { margin-bottom: 15px; }
+
+    /* Illustration */
+    .illustration {
+      position: relative;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .illustration svg {
+      width: 100%;
+      height: 100%;
+      max-width: 500px;
+      max-height: 500px;
+    }
+
+    /* Quote Section */
+    .quote-section {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 60px;
+      background: var(--deep);
+      color: var(--foam);
+    }
+
+    .quote {
+      max-width: 800px;
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 400;
+      line-height: 1.6;
+      text-align: center;
+      position: relative;
+    }
+
+    .quote-mark {
+      font-size: 4rem;
+      opacity: 0.3;
+      display: block;
+      margin-bottom: 20px;
+    }
+
+    /* Finale */
+    .finale {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 60px;
+      background: var(--deep);
+      color: var(--foam);
+      text-align: center;
+    }
+
+    .finale-rings {
+      position: relative;
+      width: 300px;
+      height: 300px;
+      margin-bottom: 60px;
+    }
+
+    .ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--foam);
+      border-radius: 50%;
+      opacity: 0.3;
+    }
+
+    .finale-title {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+      margin-bottom: 30px;
+    }
+
+    .finale-text {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      max-width: 600px;
+      opacity: 0.8;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .chapter-inner { grid-template-columns: 1fr; }
+      .chapter { padding: 60px 30px; }
+      .hero { padding: 40px 30px; }
+      .chapter-number { left: 30px; }
+      @media (pointer: coarse) {
+        .cursor-ring, .cursor-dot { display: none; }
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Cursor -->
+  <div class="cursor-ring"></div>
+  <div class="cursor-dot"></div>
+
+  <!-- Progress Bar -->
+  <div class="progress-bar"></div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">
+        <span class="line">
+          <span class="word">Your</span>
+          <span class="word">Story</span>
+        </span>
+        <span class="line">
+          <span class="word">Title</span>
+        </span>
+      </h1>
+      <p class="hero-subtitle">A subtitle goes here</p>
+    </div>
+    <div class="scroll-indicator">
+      <span>Scroll to explore</span>
+      <div class="scroll-line"></div>
+    </div>
+  </section>
+
+  <!-- Chapter 1 -->
+  <section class="chapter light">
+    <span class="chapter-number">01</span>
+    <div class="chapter-inner">
+      <div class="chapter-content">
+        <p class="chapter-label">Chapter One</p>
+        <h2 class="chapter-title">First Section Title</h2>
+        <div class="chapter-description">
+          <p>Your first paragraph of content goes here. Make it compelling and set the stage for your story.</p>
+          <p>Add additional paragraphs as needed to develop your narrative.</p>
+        </div>
+      </div>
+      <div class="illustration">
+        <svg viewBox="0 0 500 500" fill="none">
+          <path class="draw-path organic-path" d="M250 150 Q200 120 150 180 Q100 260 180 320 Q260 360 320 280 Q360 200 300 150 Q280 130 250 150" stroke="var(--deep)" stroke-width="2" fill="none"/>
+          <circle class="orbit-element" cx="250" cy="250" r="100" stroke="var(--deep)" stroke-width="1" fill="none" opacity="0.3"/>
+          <circle class="draw-path" cx="250" cy="150" r="10" fill="var(--deep)"/>
+          <circle class="draw-path" cx="350" cy="250" r="10" fill="var(--deep)"/>
+          <circle class="draw-path" cx="250" cy="350" r="10" fill="var(--deep)"/>
+          <circle class="draw-path" cx="150" cy="250" r="10" fill="var(--deep)"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 2 -->
+  <section class="chapter dark">
+    <span class="chapter-number">02</span>
+    <div class="chapter-inner reverse">
+      <div class="illustration">
+        <svg viewBox="0 0 500 500" fill="none">
+          <rect class="draw-path organic-path" x="100" y="100" width="300" height="300" stroke="var(--foam)" stroke-width="2" rx="10"/>
+          <path class="draw-path" d="M 150 200 L 350 200 M 150 250 L 350 250 M 150 300 L 350 300" stroke="var(--foam)" stroke-width="1.5"/>
+          <circle class="draw-path" cx="130" cy="200" r="6" fill="var(--foam)"/>
+          <circle class="draw-path" cx="130" cy="250" r="6" fill="var(--foam)"/>
+          <circle class="draw-path" cx="130" cy="300" r="6" fill="var(--foam)"/>
+        </svg>
+      </div>
+      <div class="chapter-content">
+        <p class="chapter-label">Chapter Two</p>
+        <h2 class="chapter-title">Second Section Title</h2>
+        <div class="chapter-description">
+          <p>Continue developing your narrative. Dark sections create contrast and visual rhythm.</p>
+          <p>The reversed layout adds visual variety to your storytelling.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chapter 3 -->
+  <section class="chapter light">
+    <span class="chapter-number">03</span>
+    <div class="chapter-inner">
+      <div class="chapter-content">
+        <p class="chapter-label">Chapter Three</p>
+        <h2 class="chapter-title">Third Section Title</h2>
+        <div class="chapter-description">
+          <p>Build toward your conclusion. Each chapter should flow naturally to the next.</p>
+        </div>
+      </div>
+      <div class="illustration">
+        <svg viewBox="0 0 500 500" fill="none">
+          <g class="orbit-group" style="transform-origin: 250px 250px;">
+            <circle cx="250" cy="250" r="150" stroke="var(--deep)" stroke-width="1" fill="none" opacity="0.2"/>
+            <circle class="draw-path" cx="250" cy="100" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="370" cy="180" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="400" cy="250" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="370" cy="320" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="250" cy="400" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="130" cy="320" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="100" cy="250" r="12" fill="var(--deep)"/>
+            <circle class="draw-path" cx="130" cy="180" r="12" fill="var(--deep)"/>
+            <circle cx="250" cy="250" r="30" fill="none" stroke="var(--deep)" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quote Section -->
+  <section class="quote-section">
+    <blockquote class="quote">
+      <span class="quote-mark">"</span>
+      Add a meaningful quote here to break up the content and provide emphasis.
+    </blockquote>
+  </section>
+
+  <!-- Finale -->
+  <section class="finale">
+    <div class="finale-rings">
+      <div class="ring" style="width: 100px; height: 100px;"></div>
+      <div class="ring" style="width: 180px; height: 180px;"></div>
+      <div class="ring" style="width: 260px; height: 260px;"></div>
+    </div>
+    <h2 class="finale-title">Your Conclusion</h2>
+    <p class="finale-text">
+      End with a powerful summary that ties everything together.
+    </p>
+  </section>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+  <script>
+    gsap.registerPlugin(ScrollTrigger);
+
+    // Custom Cursor
+    const cursorRing = document.querySelector('.cursor-ring');
+    const cursorDot = document.querySelector('.cursor-dot');
+    let cursorX = 0, cursorY = 0;
+    let dotX = 0, dotY = 0;
+
+    document.addEventListener('mousemove', (e) => {
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      cursorX += (mouseX - cursorX) * 0.15;
+      cursorY += (mouseY - cursorY) * 0.15;
+
+      dotX += (mouseX - dotX) * 0.4;
+      dotY += (mouseY - dotY) * 0.4;
+
+      cursorRing.style.left = cursorX - 20 + 'px';
+      cursorRing.style.top = cursorY - 20 + 'px';
+
+      cursorDot.style.left = dotX - 4 + 'px';
+      cursorDot.style.top = dotY - 4 + 'px';
+    });
+
+    // Hero Animations
+    const heroTl = gsap.timeline();
+    heroTl.to('.hero-title .word', {
+      y: 0,
+      opacity: 1,
+      duration: 1,
+      stagger: 0.08,
+      ease: 'power3.out'
+    })
+    .to('.hero-subtitle', {
+      opacity: 1,
+      duration: 1,
+      ease: 'power2.out'
+    }, 0.3)
+    .to('.scroll-indicator', {
+      opacity: 1,
+      duration: 0.8,
+      ease: 'power2.out'
+    }, 0.6);
+
+    // SVG Draw Animations Setup
+    document.querySelectorAll('.draw-path').forEach(path => {
+      const length = path.getTotalLength();
+      path.style.strokeDasharray = length;
+      path.style.strokeDashoffset = length;
+    });
+
+    // Draw animations on scroll
+    gsap.to('.draw-path', {
+      strokeDashoffset: 0,
+      duration: 1.5,
+      stagger: 0.15,
+      ease: 'power2.inOut',
+      scrollTrigger: {
+        trigger: '.chapter',
+        start: 'top 70%'
+      }
+    });
+
+    // Orbit animations (continuous)
+    gsap.to('.orbit-group', {
+      rotation: 360,
+      duration: 25,
+      repeat: -1,
+      ease: 'none',
+      transformOrigin: '250px 250px'
+    });
+
+    gsap.to('.orbit-element', {
+      rotation: -360,
+      duration: 20,
+      repeat: -1,
+      ease: 'none',
+      transformOrigin: '250px 250px'
+    });
+
+    // Chapter Content Fade-In (using set + to pattern)
+    gsap.set('.chapter-content', { opacity: 0, y: 40 });
+    gsap.utils.toArray('.chapter-content').forEach(content => {
+      gsap.to(content, {
+        opacity: 1,
+        y: 0,
+        duration: 1,
+        scrollTrigger: {
+          trigger: content,
+          start: 'top 80%'
+        }
+      });
+    });
+
+    // Quote Animation
+    gsap.set('.quote', { opacity: 0, y: 30 });
+    gsap.to('.quote', {
+      opacity: 1,
+      y: 0,
+      duration: 1.2,
+      scrollTrigger: {
+        trigger: '.quote-section',
+        start: 'top 60%'
+      }
+    });
+
+    // Finale Animations
+    gsap.set('.finale-rings, .finale-title, .finale-text', { opacity: 0, y: 40 });
+
+    gsap.to('.finale-rings', {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      duration: 1,
+      scrollTrigger: {
+        trigger: '.finale',
+        start: 'top 60%'
+      }
+    });
+
+    gsap.to('.finale-title', {
+      opacity: 1,
+      y: 0,
+      duration: 1,
+      delay: 0.3,
+      scrollTrigger: {
+        trigger: '.finale',
+        start: 'top 60%'
+      }
+    });
+
+    gsap.to('.finale-text', {
+      opacity: 0.8,
+      y: 0,
+      duration: 1,
+      delay: 0.5,
+      scrollTrigger: {
+        trigger: '.finale',
+        start: 'top 60%'
+      }
+    });
+
+    // Spinning rings in finale
+    gsap.to('.ring:nth-child(1)', {
+      rotation: 360,
+      duration: 15,
+      repeat: -1,
+      ease: 'none'
+    });
+
+    gsap.to('.ring:nth-child(2)', {
+      rotation: -360,
+      duration: 20,
+      repeat: -1,
+      ease: 'none'
+    });
+
+    gsap.to('.ring:nth-child(3)', {
+      rotation: 360,
+      duration: 25,
+      repeat: -1,
+      ease: 'none'
+    });
+
+    // Progress Bar
+    gsap.to('.progress-bar', {
+      scaleX: 1,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: 'body',
+        start: 'top top',
+        end: 'bottom bottom',
+        scrub: 0.3
+      }
+    });
+
+    // Parallax effects on illustrations
+    gsap.utils.toArray('.illustration svg').forEach(svg => {
+      gsap.to(svg, {
+        y: -50,
+        scrollTrigger: {
+          trigger: svg.closest('.chapter'),
+          start: 'top center',
+          end: 'bottom center',
+          scrub: 1
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "project": "",
+  "created_at": "",
+  "features": [
+    {
+      "id": "F-001",
+      "description": "",
+      "priority": "P0",
+      "status": "pending",
+      "dependencies": [],
+      "acceptance_criteria": []
+    }
+  ],
+  "metadata": {
+    "total": 0,
+    "completed": 0,
+    "in_progress": 0,
+    "blocked": 0
+  }
+}
