@@ -28,6 +28,8 @@ Project setup and feature breakdown for INIT state.
 8. Break down into atomic features (INVEST criteria)
 9. Create feature-list.json: `scripts/create-feature-list.sh`
 10. Initialize progress tracking: `scripts/init-progress.sh`
+11. **Verify INIT complete**: `scripts/verify-init.sh`
+    - Must pass all 14 checks before transitioning to IMPLEMENT
 
 ## Exit Criteria (Code Verified)
 
@@ -60,6 +62,7 @@ scripts/check-dependencies.sh --quiet
 | `scripts/check-dependencies.sh` | Verify env vars, services, ports |
 | `scripts/create-feature-list.sh` | Generate feature-list.json |
 | `scripts/init-progress.sh` | Initialize .claude/progress/ |
+| `scripts/verify-init.sh` | Verify all INIT criteria met (14 checks) |
 
 ## References
 
