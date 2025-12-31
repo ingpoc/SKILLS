@@ -27,6 +27,7 @@ log "Checking MCP servers..."
 # Find and run mcp-setup verification if available
 MCP_VERIFY_SCRIPT=""
 for path in \
+    "$HOME/.claude/skills/mcp-setup/scripts/verify-setup.sh" \
     "../../.skills/mcp-setup/scripts/verify-setup.sh" \
     ".skills/mcp-setup/scripts/verify-setup.sh"
 do
@@ -38,15 +39,21 @@ done
 
 if [ -n "$MCP_VERIFY_SCRIPT" ]; then
     log "  Running MCP setup verification..."
-    bash "$MCP_VERIFY_SCRIPT" 2>&1 | while IFS= read -r line; do
-        if [[ "$line" == *"✓"* ]]; then
-            log "    $line"
-        elif [[ "$line" == *"✗"* ]]; then
-            log "    $line"
-        elif [[ "$line" == *"Failed"* ]]; then
-            log "    $line"
-        fi
+    # Temporarily disable set -e for command substitution
+    set +e
+    MCP_OUTPUT=$(bash "$MCP_VERIFY_SCRIPT" 2>&1)
+    MCP_EXIT_CODE=$?
+    set -e
+
+    # Just show all output from MCP verification
+    echo "$MCP_OUTPUT" | while IFS= read -r line; do
+        log "    $line"
     done
+
+    # Check if MCP verification passed (exit code 0 = success)
+    if [ $MCP_EXIT_CODE -ne 0 ]; then
+        ERRORS+=("MCP servers verification failed - run mcp-setup skill")
+    fi
 else
     log "  Note: mcp-setup skill not found - skipping MCP check"
 fi

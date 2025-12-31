@@ -17,50 +17,54 @@ Configure required MCP servers for agent-harness token efficiency and learning l
 
 ## Setup Instructions
 
-### 1. Install token-efficient MCP
+**Quick setup** - Run `scripts/setup-all.sh` in your project directory:
 
 ```bash
-# Clone and build
-git clone https://github.com/gurusharan/token-efficient-mcp.git ~/token-efficient-mcp
-cd ~/token-efficient-mcp
+cd /path/to/your/project
+bash ~/.claude/skills/mcp-setup/scripts/setup-all.sh
+```
+
+This will:
+1. Create `mcp/` folder in your project
+2. Clone and build token-efficient MCP
+3. Clone and install context-graph MCP
+4. Prompt for Voyage AI API key
+5. Generate `.mcp.json` in project root
+
+---
+
+**Manual setup** (if needed):
+
+### 1. Install token-efficient MCP in `mcp/`
+
+```bash
+mkdir -p mcp
+git clone https://github.com/gurusharan/token-efficient-mcp.git mcp/token-efficient-mcp
+cd mcp/token-efficient-mcp
 npm install
 npm run build
 ```
 
-### 2. Install context-graph MCP
+### 2. Install context-graph MCP in `mcp/`
 
 ```bash
-# Already in agent-harness, just install dependencies
-cd /path/to/agent-harness/context-graph-mcp
+git clone https://github.com/gurusharan/agent-harness.git mcp/context-graph-mcp
+cd mcp/context-graph-mcp/context-graph-mcp  # or just mcp/context-graph-mcp
 pip install -r requirements.txt
 ```
 
-### 3. Get Voyage AI API Key
-
-1. Sign up at https://voyageai.com
-2. Get API key from dashboard
-3. Export: `export VOYAGE_API_KEY="your_key_here"`
-
-### 4. Configure MCP
-
-**Project-level** `.mcp.json` at agent-harness root:
+### 3. Create `.mcp.json` in project root
 
 ```json
 {
   "mcpServers": {
     "token-efficient": {
-      "command": "srt",
-      "args": ["node", "/absolute/path/to/token-efficient-mcp/dist/index.js"]
+      "command": "node",
+      "args": ["mcp/token-efficient-mcp/dist/index.js"]
     },
     "context-graph": {
       "command": "uv",
-      "args": [
-        "--directory",
-        "/absolute/path/to/agent-harness/context-graph-mcp",
-        "run",
-        "python",
-        "server.py"
-      ],
+      "args": ["--directory", "mcp/context-graph-mcp", "run", "python", "server.py"],
       "env": {
         "VOYAGE_API_KEY": "your_key_here"
       }
@@ -69,23 +73,9 @@ pip install -r requirements.txt
 }
 ```
 
-Paths are auto-detected by the setup script.
+### 4. Restart Claude Code
 
-### 5. Verify
-
-```bash
-# Restart Claude Code, then check tools are available
-# You should see: context_store_trace, context_query_traces, etc.
-```
-
-## Quick Setup Script
-
-Run `scripts/setup-all.sh` to automate:
-
-1. Clone/build token-efficient MCP
-2. Install context-graph dependencies
-3. Prompt for Voyage AI key
-4. Generate project-level `.mcp.json` at agent-harness root
+After setup, restart Claude Code to load MCP servers.
 
 ## Verification
 

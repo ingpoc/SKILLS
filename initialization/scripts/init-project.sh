@@ -148,10 +148,19 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────
-# Quick Reference (minimal - orchestrator.md has full details)
+# Quick Reference (from skill template)
 # ─────────────────────────────────────────────────────────────────
 if [ ! -f ".claude/CLAUDE.md" ]; then
-    cat > .claude/CLAUDE.md << 'EOF'
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    TEMPLATE="$SCRIPT_DIR/../assets/CLAUDE.template.md"
+
+    if [ -f "$TEMPLATE" ]; then
+        cp "$TEMPLATE" .claude/CLAUDE.md
+        echo "Created: .claude/CLAUDE.md (from template)"
+    else
+        echo "Warning: Template not found at $TEMPLATE"
+        echo "Creating minimal .claude/CLAUDE.md..."
+        cat > .claude/CLAUDE.md << 'TEMPLATE_EOF'
 # Quick Reference
 
 Full orchestrator instructions are in `~/.claude/prompts/orchestrator.md`
@@ -162,36 +171,18 @@ Full orchestrator instructions are in `~/.claude/prompts/orchestrator.md`
 # Check current state
 ~/.claude/skills/orchestrator/scripts/check-state.sh
 
-# Run tests (reads test_command from .claude/config/project.json)
+# Run tests
 ~/.claude/skills/testing/scripts/run-unit-tests.sh
-
-# Health check (reads health_check from config)
-~/.claude/skills/implementation/scripts/health-check.sh
-
-# Browser smoke test (reads dev_server_port from config)
-~/.claude/skills/browser-testing/scripts/smoke-test.sh
 ```
-
-## Session Entry
-
-Run: `~/.claude/skills/orchestrator/scripts/session-entry.sh`
-
-## State → Skill Mapping
-
-| State | Skill |
-|-------|-------|
-| INIT | initialization/ |
-| IMPLEMENT | implementation/ |
-| TEST | testing/ |
-| COMPLETE | context-graph/ |
 
 ## Config Files
 
 - `.claude/config/project.json` - Project settings
 - `.claude/progress/state.json` - Current state
 - `.claude/progress/feature-list.json` - Features
-EOF
-    echo "Created: .claude/CLAUDE.md (quick reference)"
+TEMPLATE_EOF
+        echo "Created: .claude/CLAUDE.md (minimal)"
+    fi
 else
     echo "Exists: .claude/CLAUDE.md"
 fi

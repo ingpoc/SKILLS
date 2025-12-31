@@ -1,145 +1,153 @@
 #!/bin/bash
-# MCP Setup Script for agent-harness
-# Sets up token-efficient and context-graph MCP servers
-# Works for any user - auto-detects paths
+# MCP Setup Script for agent-harness projects
+# Sets up token-efficient and context-graph MCP servers in project's .mcp/ folder
+# Works for any project - creates .mcp/ in current directory
 
 set -e
 
-echo "=== agent-harness MCP Setup ==="
+echo "=== Project MCP Setup ==="
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Detect paths (works for any user)
+# Project root is current working directory
 # ─────────────────────────────────────────────────────────────────
-# Script is at: .skills/mcp-setup/scripts/setup-all.sh
-# Agent harness is 3 levels up (scripts/ → mcp-setup/ → .skills/ → agent-harness/)
-AGENT_HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+PROJECT_ROOT="$(pwd)"
+MCP_DIR="$PROJECT_ROOT/mcp"
+MCP_FILE="$PROJECT_ROOT/.mcp.json"
 
-# Auto-detect token-efficient MCP in common locations
-TOKEN_EFFICIENT=""
-for path in \
-    "$HOME/Documents/remote-claude/token-efficient-mcp" \
-    "$HOME/remote-claude/token-efficient-mcp" \
-    "$HOME/token-efficient-mcp" \
-    "$(dirname "$AGENT_HARNESS")/token-efficient-mcp"
-do
-    if [ -d "$path" ]; then
-        TOKEN_EFFICIENT="$path"
-        break
-    fi
-done
-
-# If not found, will clone to ~/token-efficient-mcp
-if [ -z "$TOKEN_EFFICIENT" ]; then
-    TOKEN_EFFICIENT="$HOME/token-efficient-mcp"
-fi
-
-echo "Agent harness: $AGENT_HARNESS"
-echo "Token-efficient: $TOKEN_EFFICIENT"
+echo "Project: $PROJECT_ROOT"
+echo "MCP folder: $MCP_DIR"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Setup token-efficient MCP
+# 1. Setup token-efficient MCP
 # ─────────────────────────────────────────────────────────────────
 echo "1. Setting up token-efficient MCP..."
 
-if [ -d "$TOKEN_EFFICIENT" ] && [ -f "$TOKEN_EFFICIENT/dist/index.js" ]; then
-    echo "   ✓ Already built, skipping..."
-elif [ ! -d "$TOKEN_EFFICIENT" ]; then
-    echo "   Cloning token-efficient-mcp..."
-    git clone https://github.com/gurusharan/token-efficient-mcp.git "$TOKEN_EFFICIENT" 2>/dev/null || true
+TOKEN_EFFICIENT_MCP="$MCP_DIR/token-efficient-mcp"
+
+# Clone if not exists
+if [ ! -d "$TOKEN_EFFICIENT_MCP" ]; then
+    echo "   Cloning to $TOKEN_EFFICIENT_MCP..."
+    mkdir -p "$MCP_DIR"
+    git clone https://github.com/ingpoc/token-efficient-mcp.git "$TOKEN_EFFICIENT_MCP" 2>/dev/null || {
+        echo "   ✗ Failed to clone token-efficient-mcp"
+        exit 1
+    }
 fi
 
-if [ -d "$TOKEN_EFFICIENT" ]; then
-    cd "$TOKEN_EFFICIENT"
+# Build
+if [ -f "$TOKEN_EFFICIENT_MCP/dist/index.js" ]; then
+    echo "   ✓ Already built"
+else
     echo "   Installing dependencies..."
-    npm install 2>/dev/null || echo "   Note: npm install had issues"
+    cd "$TOKEN_EFFICIENT_MCP"
+    npm install 2>/dev/null || echo "   ⚠ npm install had issues"
     echo "   Building..."
-    npm run build 2>/dev/null || echo "   Note: Build had issues"
+    npm run build 2>/dev/null || {
+        echo "   ✗ Build failed"
+        cd - > /dev/null
+        exit 1
+    }
     cd - > /dev/null
     echo "   ✓ token-efficient MCP ready"
-else
-    echo "   ⚠ token-efficient MCP not found"
-    echo "     Clone manually: git clone https://github.com/gurusharan/token-efficient-mcp.git ~/token-efficient-mcp"
 fi
 
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Setup context-graph MCP
+# 2. Setup context-graph MCP
 # ─────────────────────────────────────────────────────────────────
 echo "2. Setting up context-graph MCP..."
 
-CONTEXT_GRAPH="$AGENT_HARNESS/context-graph-mcp"
-if [ -d "$CONTEXT_GRAPH" ]; then
-    echo "   Installing dependencies..."
-    cd "$CONTEXT_GRAPH"
-    if command -v uv &> /dev/null; then
-        uv pip install -q -r requirements.txt 2>/dev/null || pip install -q -r requirements.txt 2>/dev/null
-    else
-        pip install -q -r requirements.txt 2>/dev/null || true
-    fi
-    cd - > /dev/null
-    echo "   ✓ context-graph MCP ready"
-else
-    echo "   ✗ context-graph-mcp not found at $CONTEXT_GRAPH"
+CONTEXT_GRAPH_MCP="$MCP_DIR/context-graph-mcp"
+
+# Clone if not exists
+if [ ! -d "$CONTEXT_GRAPH_MCP" ]; then
+    echo "   Cloning to $CONTEXT_GRAPH_MCP..."
+    mkdir -p "$MCP_DIR"
+    git clone https://github.com/ingpoc/context-graph-mcp.git "$CONTEXT_GRAPH_MCP" 2>/dev/null || {
+        echo "   ✗ Failed to clone context-graph-mcp"
+        exit 1
+    }
 fi
+
+# Install dependencies
+if [ -f "$CONTEXT_GRAPH_MCP/requirements.txt" ]; then
+    # No subdirectory
+    CONTEXT_GRAPH_SERVER="$CONTEXT_GRAPH_MCP"
+elif [ -f "$CONTEXT_GRAPH_MCP/context-graph-mcp/requirements.txt" ]; then
+    # Nested context-graph-mcp directory
+    CONTEXT_GRAPH_SERVER="$CONTEXT_GRAPH_MCP/context-graph-mcp"
+else
+    CONTEXT_GRAPH_SERVER="$CONTEXT_GRAPH_MCP"
+fi
+
+echo "   Installing Python dependencies..."
+if command -v uv &> /dev/null; then
+    uv pip install -q -r "$CONTEXT_GRAPH_SERVER/requirements.txt" 2>/dev/null || pip install -q -r "$CONTEXT_GRAPH_SERVER/requirements.txt" 2>/dev/null
+else
+    pip install -q -r "$CONTEXT_GRAPH_SERVER/requirements.txt" 2>/dev/null || true
+fi
+
+echo "   ✓ context-graph MCP ready"
 
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Get Voyage AI key
+# 3. Get Voyage AI API Key
 # ─────────────────────────────────────────────────────────────────
 echo "3. Voyage AI API Key"
 
-if [ -z "$VOYAGE_API_KEY" ]; then
+VOYAGE_KEY=""
+
+if [ -n "$VOYAGE_API_KEY" ]; then
+    echo "   ✓ Found in environment"
+    VOYAGE_KEY="$VOYAGE_API_KEY"
+else
     read -sp "   Enter your Voyage AI API key (or press Enter to skip): " VOYAGE_KEY_INPUT
     echo ""
     if [ -n "$VOYAGE_KEY_INPUT" ]; then
-        VOYAGE_API_KEY="$VOYAGE_KEY_INPUT"
+        VOYAGE_KEY="$VOYAGE_KEY_INPUT"
         echo "   ✓ API key provided"
     else
-        echo "   ⚠ No API key - you'll need to add it later"
+        echo "   ⚠ No API key - context-graph will have limited functionality"
     fi
-else
-    echo "   ✓ Found in environment"
 fi
 
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Generate .mcp.json (project-level)
+# 4. Generate .mcp.json
 # ─────────────────────────────────────────────────────────────────
 echo "4. Creating .mcp.json..."
-
-MCP_FILE="$AGENT_HARNESS/.mcp.json"
 
 # Start building config
 CONFIG_JSON="{
   \"mcpServers\": {
     \"token-efficient\": {
-      \"command\": \"srt\",
-      \"args\": [\"node\", \"$TOKEN_EFFICIENT/dist/index.js\"]
+      \"command\": \"node\",
+      \"args\": [\"$TOKEN_EFFICIENT_MCP/dist/index.js\"]
     }"
 
-# Add context-graph if exists
-if [ -d "$CONTEXT_GRAPH" ]; then
+# Add context-graph if server.py exists
+if [ -f "$CONTEXT_GRAPH_SERVER/server.py" ]; then
     CONFIG_JSON="$CONFIG_JSON,
     \"context-graph\": {
       \"command\": \"uv\",
       \"args\": [
         \"--directory\",
-        \"$CONTEXT_GRAPH\",
+        \"$CONTEXT_GRAPH_SERVER\",
         \"run\",
         \"python\",
         \"server.py\"
       ]"
 
     # Add API key if provided
-    if [ -n "$VOYAGE_API_KEY" ]; then
+    if [ -n "$VOYAGE_KEY" ]; then
         CONFIG_JSON="$CONFIG_JSON,
       \"env\": {
-        \"VOYAGE_API_KEY\": \"$VOYAGE_API_KEY\"
+        \"VOYAGE_API_KEY\": \"$VOYAGE_KEY\"
       }"
     fi
 
@@ -152,21 +160,34 @@ CONFIG_JSON="$CONFIG_JSON
 }"
 
 # Write config
-mkdir -p "$(dirname "$MCP_FILE")"
 echo "$CONFIG_JSON" | jq '.' > "$MCP_FILE" 2>/dev/null || echo "$CONFIG_JSON" > "$MCP_FILE"
 
 echo "   ✓ Created: $MCP_FILE"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# Summary
+# 5. Verify setup
 # ─────────────────────────────────────────────────────────────────
+echo "5. Verifying setup..."
+
+# Run verify-setup.sh if exists
+VERIFY_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/verify-setup.sh"
+if [ -f "$VERIFY_SCRIPT" ]; then
+    bash "$VERIFY_SCRIPT"
+else
+    echo "   ⚠ verify-setup.sh not found, skipping verification"
+fi
+
+echo ""
 echo "=== Setup Complete ==="
 echo ""
-echo "MCP servers configured in:"
+echo "MCP servers installed in:"
+echo "  $MCP_DIR/"
+echo ""
+echo "Config file:"
 echo "  $MCP_FILE"
 echo ""
 echo "Next steps:"
 echo "  1. Restart Claude Code"
-echo "  2. Tools should be available"
+echo "  2. MCP tools should be available"
 echo ""

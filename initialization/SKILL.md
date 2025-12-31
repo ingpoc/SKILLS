@@ -10,25 +10,37 @@ Project setup and feature breakdown for INIT state.
 
 ## Instructions
 
-1. **Check MCP servers**: `check-dependencies.sh` runs mcp-setup verification first
-2. Initialize project structure: `scripts/init-project.sh`
+1. Initialize project structure: `scripts/init-project.sh`
    - Creates `.claude/config/`, `.claude/progress/`
    - Creates `.claude/config/project.json` with detected project type
    - Creates `.claude/CLAUDE.md` with project quick reference
-3. Detect project type: `scripts/detect-project.sh` (already run by init-project.sh)
+
+2. Detect project type: `scripts/detect-project.sh` (already run by init-project.sh)
+
+3. Check dependencies: `scripts/check-dependencies.sh`
+   - Checks MCP servers (calls verify-setup.sh)
+   - Checks environment variables, init script, ports, database, external services
+   - **If MCP verification fails**: Load `~/.claude/skills/mcp-setup/SKILL.md` → Run `scripts/setup-all.sh`
+   - Re-run check-dependencies.sh after fixing
+
 4. Create init script: `scripts/create-init-script.sh`
-5. Check dependencies: `scripts/check-dependencies.sh`
-6. **Setup hooks**:
+
+5. **Setup hooks**:
    - Check: `~/.claude/hooks/verify-state-transition.py` exists
    - If NO: Load `~/.claude/skills/global-hook-setup/SKILL.md` → Run `setup-global-hooks.sh`
    - Check: `.claude/hooks/verify-tests.py` exists
    - If NO: Load `.skills/project-hook-setup/SKILL.md` → Run `setup-project-hooks.sh`
    - Verify both complete before continuing
-7. Analyze user requirements
-8. Break down into atomic features (INVEST criteria)
-9. Create feature-list.json: `scripts/create-feature-list.sh`
-10. Initialize progress tracking: `scripts/init-progress.sh`
-11. **Verify INIT complete**: `scripts/verify-init.sh`
+
+6. Analyze user requirements
+
+7. Break down into atomic features (INVEST criteria)
+
+8. Create feature-list.json: `scripts/create-feature-list.sh`
+
+9. Initialize progress tracking: `scripts/init-progress.sh`
+
+10. **Verify INIT complete**: `scripts/verify-init.sh`
     - Must pass all 14 checks before transitioning to IMPLEMENT
 
 ## Exit Criteria (Code Verified)
@@ -56,10 +68,10 @@ scripts/check-dependencies.sh --quiet
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/init-project.sh` | Initialize .claude/ structure, create CLAUDE.md |
+| `scripts/init-project.sh` | Initialize .claude/ structure, copy CLAUDE.md from template |
 | `scripts/detect-project.sh` | Detect Python/Node/Django/etc |
+| `scripts/check-dependencies.sh` | Verify MCP, env vars, services, ports (runs verify-setup.sh for MCP) |
 | `scripts/create-init-script.sh` | Generate init.sh for dev server |
-| `scripts/check-dependencies.sh` | Verify env vars, services, ports |
 | `scripts/create-feature-list.sh` | Generate feature-list.json |
 | `scripts/init-progress.sh` | Initialize .claude/progress/ |
 | `scripts/verify-init.sh` | Verify all INIT criteria met (14 checks) |
@@ -76,4 +88,5 @@ scripts/check-dependencies.sh --quiet
 
 | File | Purpose |
 |------|---------|
+| assets/CLAUDE.template.md | Template for .claude/CLAUDE.md (includes MCP section) |
 | assets/feature-list.template.json | Template for new feature lists |
