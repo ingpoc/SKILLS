@@ -11,6 +11,7 @@ Per-project setup for Claude Code hooks. These hooks read from `.claude/config/p
 ## Purpose
 
 Installs 5 project-specific hooks that enforce:
+
 - Test verification before marking tested
 - File existence before marking complete
 - Health checks for API projects
@@ -20,7 +21,7 @@ Installs 5 project-specific hooks that enforce:
 ## When to Use
 
 | Situation | Action |
-|-----------|--------|
+| --------- | ------ |
 | New project | Run during INIT |
 | .claude/hooks/ missing | Run setup |
 | Project config changed | Re-run setup |
@@ -41,7 +42,7 @@ cat .claude/config/project.json
 Setup prompts for project configuration:
 
 | Setting | Description | Example |
-|---------|-------------|---------|
+| ------- | ----------- | ------- |
 | Project type | Framework used | `fastapi`, `django`, `node` |
 | Dev server port | Local development port | `8000` |
 | Health check | Command to verify server | `curl -sf http://localhost:8000/health` |
@@ -71,13 +72,15 @@ CLAUDE_NON_INTERACTIVE=1 .skills/project-hook-setup/scripts/setup-project-hooks.
 ```
 
 **Non-interactive flags:**
+
 | Flag | Purpose |
-|------|---------|
+| ---- | ------- |
 | `--non-interactive` / `-n` | Skip all prompts (keeps existing config) |
 | `--yes` / `-y` | Auto-confirm all prompts |
-| `--config` / `-c` <path> | Use existing config file |
+| `--config` / `-c` \<path\> | Use existing config file |
 
 This:
+
 - Creates `.claude/config/project.json` (or uses provided config)
 - Copies 5 hook templates to `.claude/hooks/`
 - Sets executable permissions
@@ -90,15 +93,39 @@ This:
 
 ## Hooks Installed
 
-| Hook | Purpose | Reads From |
-|------|---------|------------|
-| `verify-tests.py` | Run tests before tested | project.json → test_command |
-| `verify-files-exist.py` | Check files before complete | feature-list.json |
-| `verify-health.py` | Check server health | project.json → health_check |
-| `require-dependencies.py` | Validate env, services | project.json |
-| `session-entry.sh` | Session entry protocol | project.json |
+| Hook | Event | Purpose | Reads From |
+| ---- | ----- | ------- | ---------- |
+| `verify-tests.py` | PreToolUse | Run tests before tested | project.json → test_command |
+| `verify-files-exist.py` | PreToolUse | Check files before complete | feature-list.json |
+| `verify-health.py` | PreToolUse | Check server health | project.json → health_check |
+| `require-dependencies.py` | PreToolUse | Validate env, services | project.json |
+| `session-entry.sh` | CLI utility | Session entry protocol | project.json |
 
-**Note**: Python hooks validate both Write (`content`) and Edit (`new_string`) tool operations. Templates use `content or new_string` to catch both cases.
+**Note**: `session-entry.sh` is a CLI utility. Use: `.claude/hooks/session-entry.sh`
+
+## Settings.json Configuration
+
+Setup script configures `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-tests.py"},
+          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-files-exist.py"},
+          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-health.py"},
+          {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/require-dependencies.py"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Note**: Uses `$CLAUDE_PROJECT_DIR` for project-relative paths.
 
 ## Exit Criteria (Code Verified)
 
@@ -124,10 +151,12 @@ jq -e '.test_command' .claude/config/project.json >/dev/null
 ## Scripts
 
 | Script | Purpose |
-|--------|---------|
-| `setup-project-hooks.sh` | Main setup (config + hooks) |
+| ------ | ------- |
+| `setup-project-hooks.sh` | Main setup (config + hooks + settings + validate) |
+| `configure-project-settings.py` | Configure .claude/settings.json |
+| `validate-settings.py` | Validate hooks configured in settings.json |
 | `prompt-project-config.sh` | Interactive config creation |
-| `verify-project-hooks.sh` | Verify all installed |
+| `verify-project-hooks.sh` | Verify hook files exist |
 | `install-hooks.sh` | Copy templates to .claude/hooks/ |
 
 ## Project Config Schema
@@ -148,7 +177,7 @@ jq -e '.test_command' .claude/config/project.json >/dev/null
 ## Troubleshooting
 
 | Problem | Solution |
-|---------|----------|
+| ------- | -------- |
 | Config missing | Run `setup-project-hooks.sh` to create |
 | Hook can't read config | Check JSON syntax, verify required fields |
 | Tests not found | Update test_command in project.json |

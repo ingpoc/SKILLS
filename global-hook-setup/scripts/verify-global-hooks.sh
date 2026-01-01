@@ -2,7 +2,7 @@
 # verify-global-hooks.sh
 #
 # Verification script for global hooks.
-# Checks all 7 hooks exist and are executable.
+# Checks all 8 hooks exist and are executable.
 
 set -euo pipefail
 
@@ -14,6 +14,7 @@ EXPECTED_HOOKS=(
     "require-commit-before-tested.py"
     "require-outcome-update.py"
     "link-feature-to-trace.py"
+    "markdownlint-fix.sh"
     "remind-decision-trace.sh"
     "session-end.sh"
     "feature-commit.sh"

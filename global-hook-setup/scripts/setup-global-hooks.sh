@@ -24,13 +24,24 @@ fi
 # Run install script
 "$SCRIPT_DIR/install-hooks.sh"
 
+# Configure settings.json
+echo ""
+echo "Configuring settings.json..."
+python3 "$SCRIPT_DIR/configure-settings.py"
+
 # Verify installation
 echo ""
-echo "Verifying installation..."
+echo "Verifying hook files..."
 "$SCRIPT_DIR/verify-global-hooks.sh"
+
+# Validate settings.json
+echo ""
+echo "Validating settings.json..."
+python3 "$SCRIPT_DIR/validate-settings.py"
 
 echo ""
 echo "✅ Global hooks setup complete!"
 echo ""
 echo "Hooks installed in: $HOOKS_DIR"
+echo "Settings configured in: ~/.claude/settings.json"
 echo "Next: Set up project-specific hooks with project-hook-setup skill"

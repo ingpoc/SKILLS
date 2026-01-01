@@ -100,14 +100,25 @@ echo ""
 echo "Installing project hooks..."
 "$SCRIPT_DIR/install-hooks.sh"
 
+# Configure .claude/settings.json
+echo ""
+echo "Configuring .claude/settings.json..."
+python3 "$SCRIPT_DIR/configure-project-settings.py"
+
 # Verify
 echo ""
-echo "Verifying installation..."
+echo "Verifying hook files..."
 "$SCRIPT_DIR/verify-project-hooks.sh"
+
+# Validate settings.json
+echo ""
+echo "Validating .claude/settings.json..."
+python3 "$SCRIPT_DIR/validate-settings.py"
 
 echo ""
 echo "✅ Project hooks setup complete!"
 echo ""
 echo "Config: $CONFIG_FILE"
 echo "Hooks: $HOOKS_DIR"
+echo "Settings: $PROJECT_ROOT/.claude/settings.json"
 
