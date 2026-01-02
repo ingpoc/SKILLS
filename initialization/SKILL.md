@@ -8,45 +8,107 @@ keywords: init, setup, features, breakdown, project-detection, requirements
 
 Project setup and feature breakdown for INIT state.
 
-## Instructions
+## Execution Order (MANDATORY)
 
-1. Initialize project structure: `scripts/init-project.sh`
-   - Creates `.claude/config/`, `.claude/progress/`
-   - Creates `.claude/config/project.json` with detected project type
-   - Creates `.claude/CLAUDE.md` with project quick reference
+**Follow this exact sequence. Do NOT skip steps.**
 
-2. Detect project type: `scripts/detect-project.sh` (already run by init-project.sh)
+### Step 1: Global Setup (once per machine)
 
-3. Check dependencies: `scripts/check-dependencies.sh`
-   - Checks MCP servers (calls verify-setup.sh)
-   - Checks environment variables, init script, ports, database, external services
-   - **If MCP verification fails**: Load `~/.claude/skills/mcp-setup/SKILL.md` → Run `scripts/setup-all.sh`
-   - Re-run check-dependencies.sh after fixing
+```bash
+# Check if global CLAUDE.md exists
+[ -f ~/.claude/CLAUDE.md ] || ~/.claude/skills/initialization/scripts/global-init.sh
+```
 
-4. Create init script: `scripts/create-init-script.sh`
+### Step 2: Global Hooks (once per machine)
 
-5. **Setup hooks**:
-   - Check: `~/.claude/hooks/verify-state-transition.py` exists
-   - If NO: Load `~/.claude/skills/global-hook-setup/SKILL.md` → Run `setup-global-hooks.sh`
-   - Check: `.claude/hooks/verify-tests.py` exists
-   - If NO: Load `.skills/project-hook-setup/SKILL.md` → Run `setup-project-hooks.sh`
-   - Verify both complete before continuing
+```bash
+# Check and install global hooks
+[ -x ~/.claude/hooks/verify-state-transition.py ] || \
+    ~/.claude/skills/global-hook-setup/scripts/setup-global-hooks.sh
+```
 
-6. Analyze user requirements
+**IMPORTANT**: Load `global-hook-setup` skill if hooks missing.
 
-7. Break down into atomic features (INVEST criteria)
+### Step 3: MCP Servers (once per project)
 
-8. Create feature-list.json: `scripts/create-feature-list.sh`
+```bash
+# Check and install MCP servers
+[ -d mcp/token-efficient-mcp ] || \
+    ~/.claude/skills/mcp-setup/scripts/setup-all.sh --non-interactive
+```
 
-9. Initialize progress tracking: `scripts/init-progress.sh`
+**IMPORTANT**: Load `mcp-setup` skill if MCP missing.
 
-10. **Verify INIT complete**: `scripts/verify-init.sh`
-    - Must pass all 14 checks before transitioning to IMPLEMENT
+### Step 4: Project Structure
+
+```bash
+~/.claude/skills/initialization/scripts/init-project.sh
+```
+
+Creates:
+
+- `.claude/config/project.json` - Project settings
+- `.claude/progress/state.json` - State (transitions to INIT)
+- `CLAUDE.md` - Project documentation
+- `.claude/CLAUDE.md` - Quick reference
+
+### Step 5: Project Hooks (once per project)
+
+```bash
+# Check and install project hooks
+[ -x .claude/hooks/verify-tests.py ] || \
+    ~/.claude/skills/project-hook-setup/scripts/setup-project-hooks.sh --non-interactive
+```
+
+**IMPORTANT**: Load `project-hook-setup` skill if hooks missing.
+
+### Step 6: Check Dependencies
+
+```bash
+~/.claude/skills/initialization/scripts/check-dependencies.sh
+```
+
+Fix any errors before proceeding.
+
+### Step 7: Create Feature List
+
+- Analyze user requirements
+- Break down into atomic features (INVEST criteria)
+- Create `.claude/progress/feature-list.json`
+
+```bash
+~/.claude/skills/initialization/scripts/create-feature-list.sh
+```
+
+### Step 8: Initialize Progress
+
+```bash
+~/.claude/skills/initialization/scripts/init-progress.sh
+```
+
+### Step 9: Verify INIT Complete
+
+```bash
+~/.claude/skills/initialization/scripts/verify-init.sh
+```
+
+**Must pass all 14 checks before transitioning to IMPLEMENT.**
+
+---
+
+## CLAUDE.md Hierarchy
+
+| File | Scope | Purpose |
+|------|-------|---------|
+| `~/.claude/CLAUDE.md` | Global | User preferences, skill enforcement |
+| `CLAUDE.md` | Project | Project documentation (100-300 lines) |
+| `.claude/CLAUDE.md` | Local | Quick reference (<50 lines) |
 
 ## Exit Criteria (Code Verified)
 
 ```bash
 # Project structure initialized
+[ -f "CLAUDE.md" ]                      # Project documentation created
 [ -f ".claude/CLAUDE.md" ]              # Quick reference created
 [ -f ".claude/config/project.json" ]    # Project config
 [ -d ".claude/progress/" ]               # Tracking directory
@@ -68,13 +130,14 @@ scripts/check-dependencies.sh --quiet
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/init-project.sh` | Initialize .claude/ structure, copy CLAUDE.md from template |
+| `scripts/global-init.sh` | One-time setup for ~/.claude/CLAUDE.md (global preferences) |
+| `scripts/init-project.sh` | Initialize .claude/ structure, generate CLAUDE.md files |
 | `scripts/detect-project.sh` | Detect Python/Node/Django/etc |
-| `scripts/check-dependencies.sh` | Verify MCP, env vars, services, ports (runs verify-setup.sh for MCP) |
+| `scripts/check-dependencies.sh` | Verify MCP, env vars, services, ports |
 | `scripts/create-init-script.sh` | Generate init.sh for dev server |
 | `scripts/create-feature-list.sh` | Generate feature-list.json |
 | `scripts/init-progress.sh` | Initialize .claude/progress/ |
-| `scripts/verify-init.sh` | Verify all INIT criteria met (14 checks) |
+| `scripts/verify-init.sh` | Verify all INIT criteria met |
 
 ## References
 
@@ -88,5 +151,7 @@ scripts/check-dependencies.sh --quiet
 
 | File | Purpose |
 |------|---------|
-| assets/CLAUDE.template.md | Template for .claude/CLAUDE.md (includes MCP section) |
+| templates/CLAUDE.project.template.md | Template for CLAUDE.md (project root) |
+| templates/CLAUDE.local.template.md | Template for .claude/CLAUDE.md (quick reference) |
+| templates/framework-templates/*.md | Framework-specific content (python, node, rust, go) |
 | assets/feature-list.template.json | Template for new feature lists |

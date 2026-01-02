@@ -68,9 +68,62 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# 3. Check token-efficient MCP server
+# 3. Check runtime dependencies
 # ─────────────────────────────────────────────────────────────────
-echo "3. Checking token-efficient MCP..."
+echo "3. Checking runtime dependencies..."
+
+# Check srt (sandbox-runtime)
+if command -v srt > /dev/null 2>&1; then
+    check_pass "srt installed ($(command -v srt))"
+else
+    check_fail "srt not installed"
+    echo "     Run: npm install -g @anthropic-ai/sandbox-runtime"
+fi
+
+# Check Node.js
+if command -v node > /dev/null 2>&1; then
+    NODE_VERSION=$(node -v)
+    check_pass "node installed ($NODE_VERSION)"
+else
+    check_fail "node not installed"
+    echo "     Run: brew install node (macOS) or visit nodejs.org"
+fi
+
+# Check Python
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON_VERSION=$(python3 --version)
+    check_pass "python3 installed ($PYTHON_VERSION)"
+else
+    check_fail "python3 not installed"
+    echo "     Run: brew install python3 (macOS)"
+fi
+
+echo ""
+
+# ─────────────────────────────────────────────────────────────────
+# 4. Check srt settings
+# ─────────────────────────────────────────────────────────────────
+echo "4. Checking srt configuration..."
+
+SRT_SETTINGS="$HOME/.srt-settings.json"
+if [ -f "$SRT_SETTINGS" ]; then
+    check_pass "~/.srt-settings.json exists"
+    if jq empty "$SRT_SETTINGS" 2>/dev/null; then
+        check_pass "~/.srt-settings.json is valid JSON"
+    else
+        check_fail "~/.srt-settings.json has syntax errors"
+    fi
+else
+    check_fail "~/.srt-settings.json not found"
+    echo "     Create it or srt will use restrictive defaults"
+fi
+
+echo ""
+
+# ─────────────────────────────────────────────────────────────────
+# 5. Check token-efficient MCP server
+# ─────────────────────────────────────────────────────────────────
+echo "5. Checking token-efficient MCP..."
 
 # Check if token-efficient is configured in .mcp.json
 if jq -e '.mcpServers["token-efficient"]' "$MCP_FILE" > /dev/null 2>&1; then
@@ -96,9 +149,9 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# 4. Check context-graph MCP server
+# 6. Check context-graph MCP server
 # ─────────────────────────────────────────────────────────────────
-echo "4. Checking context-graph MCP..."
+echo "6. Checking context-graph MCP..."
 
 # Check if context-graph is configured in .mcp.json
 if jq -e '.mcpServers["context-graph"]' "$MCP_FILE" > /dev/null 2>&1; then
@@ -135,9 +188,9 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────────
-# 5. Check mcp/ folder exists
+# 7. Check mcp/ folder exists
 # ─────────────────────────────────────────────────────────────────
-echo "5. Checking mcp/ folder..."
+echo "7. Checking mcp/ folder..."
 
 if [ -d "$MCP_DIR" ]; then
     check_pass "mcp/ folder exists"

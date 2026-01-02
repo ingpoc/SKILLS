@@ -20,6 +20,20 @@ NON_INTERACTIVE="${CLAUDE_NON_INTERACTIVE:-0}"
 AUTO_YES=0
 CONFIG_PATH=""
 
+# Auto-detect non-interactive mode
+auto_detect_non_interactive() {
+    # If no TTY (running in automation/agent)
+    if [ ! -t 0 ]; then
+        NON_INTERACTIVE=1
+    fi
+    # If project.json already exists, default to non-interactive
+    if [ -f ".claude/config/project.json" ]; then
+        NON_INTERACTIVE=1
+    fi
+}
+
+auto_detect_non_interactive
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -90,8 +104,24 @@ else
             fi
         fi
     else
-        echo "Creating new project config..."
-        "$SCRIPT_DIR/prompt-project-config.sh"
+        if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+            echo "Non-interactive mode: Creating default config..."
+            # Create minimal default config
+            cat > "$CONFIG_FILE" << 'EOF'
+{
+  "project_type": "unknown",
+  "dev_server_port": 3000,
+  "test_command": "echo 'No test command configured'",
+  "health_check": "",
+  "required_env": [],
+  "required_services": []
+}
+EOF
+            echo "Created default config (update later with project-specific settings)"
+        else
+            echo "Creating new project config..."
+            "$SCRIPT_DIR/prompt-project-config.sh"
+        fi
     fi
 fi
 
