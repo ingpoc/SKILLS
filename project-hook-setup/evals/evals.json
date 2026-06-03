@@ -1,0 +1,23 @@
+{
+  "skill_name": "project-hook-setup",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just started a new FastAPI project and want to set up Claude Code hooks for it. Can you run the project-hook-setup skill to install hooks that will verify tests before marking complete, check health endpoints, and validate dependencies?",
+      "expected_output": "Project hooks installed in .claude/hooks/ with proper config in .claude/config/project.json. Hooks should include verify-tests.py, verify-health.py, require-dependencies.py, session-entry.sh, auto-load-orchestrator.sh, and verify-files-exist.py.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I need to set up project hooks for my Node.js Express API project. The dev server runs on port 3000, health check is at /health, tests are run with 'npm test', and I need Redis running at localhost:6379. Run the hook setup in non-interactive mode.",
+      "expected_output": "Project hooks configured with Node.js/Express settings, port 3000, health check command, npm test command, and Redis service requirement.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "My .claude/hooks/ directory is missing and I need to reinstall the project hooks. I already have .claude/config/project.json configured. Run setup in non-interactive mode.",
+      "expected_output": "Hooks reinstalled from templates to .claude/hooks/ directory, all made executable, settings.json updated to reference them.",
+      "files": []
+    }
+  ]
+}

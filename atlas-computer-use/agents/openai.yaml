@@ -1,0 +1,3 @@
+interface:
+  display_name: "Atlas Computer Use"
+  short_description: "Use ChatGPT Atlas through Computer Use with less UI context"

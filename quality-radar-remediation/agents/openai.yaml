@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quality Radar Remediation"
+  short_description: "Parallel audit lanes with one remediation owner"
+  default_prompt: "Use this skill to run a bounded quality audit across a control plane or repo, consolidate findings, and apply the highest-leverage remediations with proof."

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "calm",
+    "name": "Calm Paper",
+    "tagline": "Editorial · warm · cobalt",
+    "default": true,
+    "hue": 252,
+    "density": 1.0,
+    "radius": 10,
+    "mode": "light",
+    "fontDisplay": "Newsreader",
+    "fontUi": "Geist",
+    "use_when": "Default. Long reading sessions, planning, knowledge-heavy surfaces."
+  },
+  {
+    "id": "operator",
+    "name": "Operator",
+    "tagline": "Terminal · graphite · azure",
+    "hue": 212,
+    "density": 0.82,
+    "radius": 4,
+    "mode": "dark",
+    "fontDisplay": "Geist",
+    "fontUi": "Geist",
+    "use_when": "Live ops, observability, dense traces. Information density over comfort."
+  },
+  {
+    "id": "sage",
+    "name": "Sage Studio",
+    "tagline": "Original · teal · soft",
+    "hue": 180,
+    "density": 1.0,
+    "radius": 16,
+    "mode": "light",
+    "fontDisplay": "Newsreader",
+    "fontUi": "Geist",
+    "use_when": "Closest to the legacy palette. Use for backwards-compatible deployments."
+  },
+  {
+    "id": "ember",
+    "name": "Ember",
+    "tagline": "Warm · amber · cozy",
+    "hue": 28,
+    "density": 1.15,
+    "radius": 14,
+    "mode": "light",
+    "fontDisplay": "Newsreader",
+    "fontUi": "Geist",
+    "use_when": "Onboarding, marketing, celebratory states. Warmer than default."
+  },
+  {
+    "id": "midnight",
+    "name": "Midnight",
+    "tagline": "Cinematic · iris · dense",
+    "hue": 264,
+    "density": 0.82,
+    "radius": 8,
+    "mode": "dark",
+    "fontDisplay": "Newsreader",
+    "fontUi": "Geist",
+    "use_when": "Demo and presentation mode. High contrast on projectors."
+  },
+  {
+    "id": "paper",
+    "name": "Paper Mono",
+    "tagline": "Stripped · neutral · 0 chroma",
+    "hue": 0,
+    "density": 1.0,
+    "radius": 6,
+    "mode": "light",
+    "fontDisplay": "Geist",
+    "fontUi": "Geist",
+    "use_when": "Print, PDF export, accessibility-first contexts."
+  }
+]

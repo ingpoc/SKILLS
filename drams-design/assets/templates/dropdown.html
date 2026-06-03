@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dropdown</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; background: #fafafa; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; }
+
+    .dropdown { position: relative; width: 100%; max-width: 300px; }
+
+    .dropdown-track {
+      height: 48px;
+      background: rgb(238, 238, 238);
+      border-radius: 48px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .dropdown-track:hover { background: rgb(232, 232, 232); }
+
+    .dropdown-label { font-size: 15px; color: #333; }
+    .dropdown-label.placeholder { color: #999; }
+
+    .dropdown-ball {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: radial-gradient(50% 50% at 30% 30%, rgb(255, 150, 102) 0%, rgb(255, 97, 26) 100%);
+      box-shadow: rgba(232, 61, 23, 0.4) 0px 0px 2px -1px inset, rgba(0, 0, 0, 0.2) -2px -1px 3px 0px inset;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.3s ease;
+    }
+
+    .dropdown.open .dropdown-ball { transform: rotate(180deg); }
+
+    .dropdown-arrow { width: 14px; height: 14px; fill: rgb(252, 252, 250); }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      overflow: hidden;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.3s ease;
+      z-index: 10;
+    }
+
+    .dropdown.open .dropdown-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .dropdown-item {
+      padding: 14px 20px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      font-size: 15px;
+      color: #333;
+    }
+
+    .dropdown-item:hover { background: rgb(238, 238, 238); }
+    .dropdown-item.selected { color: rgb(255, 97, 26); }
+  </style>
+</head>
+<body>
+  <div class="dropdown" id="dropdown1">
+    <div class="dropdown-track" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <span class="dropdown-label placeholder">Select size</span>
+      <div class="dropdown-ball">
+        <svg class="dropdown-arrow" viewBox="0 0 256 256"><path d="M128,168l-72-72a12,12,0,0,1,17-17l55,55,55-55a12,12,0,0,1,17,17Z"/></svg>
+      </div>
+    </div>
+    <div class="dropdown-menu" role="listbox">
+      <div class="dropdown-item" data-value="xs" role="option">XS - Extra Small</div>
+      <div class="dropdown-item" data-value="s" role="option">S - Small</div>
+      <div class="dropdown-item" data-value="m" role="option">M - Medium</div>
+      <div class="dropdown-item" data-value="l" role="option">L - Large</div>
+      <div class="dropdown-item" data-value="xl" role="option">XL - Extra Large</div>
+    </div>
+  </div>
+
+  <script>
+    const dropdown = document.getElementById('dropdown1');
+    const track = dropdown.querySelector('.dropdown-track');
+    const label = dropdown.querySelector('.dropdown-label');
+    const items = dropdown.querySelectorAll('.dropdown-item');
+
+    track.addEventListener('click', () => {
+      dropdown.classList.toggle('open');
+      track.setAttribute('aria-expanded', dropdown.classList.contains('open'));
+    });
+
+    items.forEach(item => {
+      item.addEventListener('click', () => {
+        items.forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+        label.textContent = item.textContent;
+        label.classList.remove('placeholder');
+        dropdown.classList.remove('open');
+        track.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+        track.setAttribute('aria-expanded', 'false');
+      }
+    });
+  </script>
+</body>
+</html>

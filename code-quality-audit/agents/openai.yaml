@@ -1,0 +1,3 @@
+interface:
+  display_name: "Code Quality Audit"
+  short_description: "Create an isolated audit worktree and produce a ranked PROGRESS.md backlog without editing code."

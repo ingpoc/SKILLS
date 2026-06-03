@@ -1,0 +1,15 @@
+interface:
+  display_name: "Codex Productivity Auditor"
+  short_description: "Audit and tune Codex project setup"
+  default_prompt: "Use $codex-productivity-auditor to audit this project and recent session signals for the highest-leverage Codex setup changes."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "openaiDeveloperDocs"
+      description: "Official OpenAI Codex docs for current feature behavior"
+      transport: "streamable_http"
+      url: "https://developers.openai.com/mcp"
+
+policy:
+  allow_implicit_invocation: true

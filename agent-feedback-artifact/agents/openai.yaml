@@ -1,0 +1,3 @@
+interface:
+  display_name: "Agent Feedback Artifact"
+  short_description: "Add in-app agent feedback to HTML/apps"

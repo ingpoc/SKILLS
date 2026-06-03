@@ -1,0 +1,3 @@
+interface:
+  display_name: "Skill Profile"
+  short_description: "Switch project skill profiles and import skills from main"

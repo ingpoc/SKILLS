@@ -1,0 +1,23 @@
+{
+  "skill_name": "introspect",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "The scan skill keeps dropping research insights every time I run it. I've manually injected them twice now. /introspect",
+      "expected_output": "Identifies scan-on-haiku as root cause, classifies manual injection as FIX, proposes script solution, updates state.json",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I've been improving skills for 2 hours. Checkpoint what we've learned before I go.",
+      "expected_output": "4-quadrant table covering session patterns, creates memory files, updates state.json priorities",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Everything I try with eval-score produces junk files instead of scores. The skill is broken.",
+      "expected_output": "Identifies missing guardrails as root cause, proposes adding DO NOT CREATE FILES, suggests scripting the scoring",
+      "files": []
+    }
+  ]
+}

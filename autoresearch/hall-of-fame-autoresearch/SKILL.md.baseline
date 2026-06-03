@@ -1,0 +1,166 @@
+# Hall of Fame Autoresearch Loop Skill
+
+**Trigger phrases:** "run hall of fame autoresearch", "leave the hall of fame loop running", "hall of fame overnight research", "come back with hall of fame candidates", "run the hall of fame loop", "screen stocks for hall of fame fingerprint", "autoresearch hall of fame", "keep finding hall of fame stocks", "run hall of fame screener in loop"
+
+## What It Does
+
+Runs an autonomous research loop targeting Hall of Fame 2x stock discovery. Each iteration:
+
+1. **Screens** NSE mid/small cap universe for v4 fingerprint candidates
+2. **Verifies** outcomes for stocks where T0 date has passed
+3. **Updates** the feature matrix with new WIN/NM/FP outcomes
+4. **Logs** findings to the artifact log
+5. **Refines** rules if new data suggests improvement
+
+**v4 Fingerprint (current):**
+
+```
+pre90d_return > +15%      ← 3-month accumulation
+m1_return < +20%           ← NOT accelerating into T0
+t0_price < 2000            ← Small/mid cap only
+```
+
+## Universe Sources
+
+The screener checks these sources for candidate stocks:
+
+| Source | Path | Coverage |
+|--------|------|----------|
+| midcap_v1 events | `experiments/stock-event-study/data/midcap_v1_event_labels.csv` | 30 midcap names x 4 quarters |
+| Hall of Fame verified | `data/hall_of_fame/feature_matrix_v2.csv` | 19 verified winners |
+| Non-movers | `data/hall_of_fame/non_movers.csv` | 12 verified non-movers |
+| Near-misses + FP | `data/hall_of_fame/near_misses_and_fp.csv` | 9 events |
+
+## Loop Instructions
+
+```
+1. Read state.json (iteration, candidates_found, pending_verifications, status)
+2. If status == "complete", stop — research goal achieved
+3. Screen universe:
+   a. Read all candidate symbols from universe sources above
+   b. For each symbol not yet screened in this iteration:
+      - Fetch 90d, 30d, 21d price history from Yahoo Finance
+      - Compute: pre90d_return, m1_return, t0_price, bb_position_20d, vs90d
+      - Apply v4 filter: pre90d > 15 AND m1 < 20 AND price < 2000
+   c. Rank candidates by combination of pre90d and m1 (prefer: high pre90d, lowest m1)
+4. Verify pending outcomes:
+   a. For each pending verification (T0 date passed, 90d window elapsed):
+      - Fetch actual prices from Yahoo Finance
+      - Compute actual 90d return
+      - Classify: WIN (>=100%), NM (80-99%), FP (<80%)
+      - Log outcome to feature matrix
+5. Log iteration results:
+   a. Write artifacts/iteration_N.md with:
+      - New candidates found (symbols, feature values, discovery date)
+      - New outcomes verified (symbol, actual return, classification)
+      - Rule refinement suggestions (if any)
+   b. Write artifacts/iteration_N.json with full candidate list
+6. Update state.json:
+   - iteration++
+   - Add new candidates to candidates_found
+   - Remove verified items from pending_verifications
+   - Update last_run timestamp
+7. Check stopping condition:
+   - If 3 consecutive iterations with no new WIN outcomes → set status="saturated"
+   - If iteration >= max_iterations → set status="complete"
+   - Otherwise continue
+```
+
+## v4 Feature Computation
+
+For each candidate symbol:
+
+```
+pre90d_return  = (price_T0 / price_T-90 - 1) * 100   # 3-month accumulation
+m1_return      = (price_T0 / price_T-21 - 1) * 100   # Monthly momentum
+bb_position_20d = (price_T0 - lower_band) / (upper_band - lower_band)  # 0=lower, 1=upper
+vs90d_high     = (price_T0 / 90d_high - 1) * 100      # Distance from 90d high
+t0_price       = adjusted_close on T0 date
+```
+
+**T0 date determination:** Use the earnings announcement date from the event data. If unknown, estimate from the batch (e.g., Q4 FY24 results typically late March, Q1 FY25 results late July).
+
+## Outcome Classification
+
+| Classification | Condition | Action |
+|---------------|-----------|--------|
+| **WIN** | 90d return >= 100% | Add to feature_matrix as new verified winner |
+| **NM** (near-miss) | 90d return 80-99% | Add to near_misses_and_fp as near-miss |
+| **FP** (false positive) | 90d return < 80% | Add to near_misses_and_fp as FP |
+
+## Validator
+
+- **Primary metric:** New WIN outcomes verified per iteration
+- **Secondary metric:** New candidates found matching v4 fingerprint
+- **Stopping condition:** No new WINs in 3 consecutive iterations (fingerprint is stable)
+- **Rule refinement trigger:** If 2+ new WINs contradict current rules → suggest rule update
+
+## Rule Refinement Criteria
+
+If new data contradicts current rules, suggest refinement ONLY if:
+
+1. **New WIN has m1 >= 20%** → suggest m1 threshold raise to 25%
+2. **New WIN has pre90d <= 15%** → suggest pre90d threshold lower to 10%
+3. **New WIN has price >= 2000** → suggest price threshold raise to 3000
+4. **New NM has m1 < 20%** → this would invalidate the rule (don't change without 3+ NMs)
+
+**Do NOT change rules based on less than 2 confirming events.**
+
+## Error Handling
+
+- Yahoo Finance fetch fails → skip symbol, log as "fetch_failed"
+- Invalid price data → skip symbol, log as "invalid_data"
+- If >50% of universe fails → set status="blocked", stop and report
+- Script error → log error, increment `blocked_count`, continue to next symbol
+
+## Output Files
+
+| File | Purpose |
+|------|---------|
+| `artifacts/iteration_N.md` | Per-iteration log: candidates found, outcomes verified, rule suggestions |
+| `artifacts/iteration_N.json` | Full structured output: all candidates with feature values, all outcomes |
+| `artifacts/live_candidates.md` | Running list of currently flagged candidates awaiting T0 or verification |
+| `state.json` | Persistent state across iterations |
+| `data/hall_of_fame/feature_matrix_v2.csv` | Updated with new WIN outcomes |
+| `data/hall_of_fame/near_misses_and_fp.csv` | Updated with new NM/FP outcomes |
+
+## State Schema (state.json)
+
+```json
+{
+  "iteration": 1,
+  "last_artifact": "iteration_1.md",
+  "status": "running",
+  "target": "hall-of-fame",
+  "rule_version": "v4",
+  "max_iterations": 20,
+  "consecutive_no_win": 0,
+  "blocked_count": 0,
+  "candidates_found": [
+    {
+      "symbol": "SYMBOL",
+      "discovered_date": "YYYY-MM-DD",
+      "t0_date": "YYYY-MM-DD or null",
+      "pre90d": 25.3,
+      "m1": 8.4,
+      "price": 450,
+      "status": "pending_T0 | pending_verification | verified"
+    }
+  ],
+  "last_run": "YYYY-MM-DDTHH:MM:SS"
+}
+```
+
+## Key Reference
+
+- **v4 Fingerprint rules:** `data/hall_of_fame/schema.md`
+- **Feature definitions:** `data/hall_of_fame/schema.md` (Field Definitions section)
+- **Yahoo Finance fetcher:** `experiments/stock-event-study/scripts/fetch_prices_yahoo_chart.py`
+- **Existing Hall of Fame data:** `data/hall_of_fame/feature_matrix_v2.csv`
+
+## Loop Principles
+
+- **Continuous discovery:** Always be looking for new candidates matching the fingerprint
+- **Outcome tracking:** Every stock with a passed T0 date should be verified
+- **Rule stability:** Only refine rules with 2+ confirming events; don't chase noise
+- **Daily context:** Note the current earnings season (Q4 FY25 = Jan-Mar 2025, etc.)

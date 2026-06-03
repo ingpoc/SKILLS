@@ -1,0 +1,285 @@
+/* =========================================================================
+   Autonomous Agent Builder — Design Tokens v2
+   ------------------------------------------------------------------------
+   Philosophy: "Operator console with editorial calm."
+   Every status token shares the same chroma (0.12) and lightness (0.58 L / 0.72 D)
+   so they sit together. Dark mode is designed first, not inverted.
+   ========================================================================= */
+
+:root {
+  /* --- Accent (tweakable hue) ---------------------------------------- */
+  --accent-hue: 252;         /* cobalt default; 180 = teal, 82 = amber, 28 = red, 300 = magenta */
+  --accent-chroma: 0.14;
+  --accent-l-light: 0.48;
+  --accent-l-dark: 0.72;
+
+  /* --- Radius scale (tweakable) ------------------------------------- */
+  --radius-base: 10px;
+  --radius-xs: calc(var(--radius-base) * 0.4);
+  --radius-sm: calc(var(--radius-base) * 0.7);
+  --radius-md: var(--radius-base);
+  --radius-lg: calc(var(--radius-base) * 1.6);
+  --radius-xl: calc(var(--radius-base) * 2.4);
+  --radius-full: 999px;
+
+  /* --- Density (tweakable) ------------------------------------------ */
+  --density: 1;              /* 0.82 compact, 1 comfortable, 1.15 cozy */
+  --space-1: calc(4px * var(--density));
+  --space-2: calc(8px * var(--density));
+  --space-3: calc(12px * var(--density));
+  --space-4: calc(16px * var(--density));
+  --space-5: calc(20px * var(--density));
+  --space-6: calc(24px * var(--density));
+  --space-7: calc(32px * var(--density));
+  --space-8: calc(40px * var(--density));
+
+  /* --- Type scale --------------------------------------------------- */
+  --text-micro: 10px;
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 34px;
+  --text-display: 48px;
+
+  /* --- Motion tokens ----------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 420ms;
+
+  /* Named choreography durations (match GSAP hooks in patterns.md). */
+  --dur-hover-shift: 180ms;
+  --dur-drawer: 400ms;
+  --dur-drawer-backdrop: 300ms;
+  --dur-section-entrance: 450ms;
+  --dur-card-cascade: 350ms;
+  --dur-tag-toggle: 400ms;
+  --dur-cost-bar: 500ms;
+
+  /* --- Editorial prose widths -------------------------------------- */
+  --prose-narrow: 42rem;   /* lede paragraphs */
+  --prose-body: 69ch;      /* EditorialContent paragraph */
+  --prose-list: 70ch;
+  --prose-code: 72ch;
+  --prose-display: 46rem;  /* KnowledgeEditorialSummary hero */
+  --prose-h1: 16ch;
+}
+
+/* =========================================================================
+   LIGHT THEME — warm paper
+   ========================================================================= */
+html[data-theme="light"], :root {
+  --bg: oklch(0.985 0.006 88);
+  --bg-sunk: oklch(0.968 0.007 88);
+  --surface: oklch(0.998 0.004 88);
+  --surface-2: oklch(0.984 0.005 88);
+  --surface-3: oklch(0.96 0.006 88);
+  --surface-raised: oklch(1 0 0);
+
+  --fg: oklch(0.22 0.012 72);
+  --fg-2: oklch(0.38 0.014 72);
+  --fg-3: oklch(0.54 0.012 72);
+  --fg-muted: oklch(0.68 0.01 72);
+  --fg-on-accent: oklch(0.995 0.004 88);
+
+  --line: oklch(0.9 0.008 80);
+  --line-2: oklch(0.94 0.006 80);
+  --line-strong: oklch(0.82 0.01 80);
+
+  --accent: oklch(var(--accent-l-light) var(--accent-chroma) var(--accent-hue));
+  --accent-soft: oklch(0.95 0.03 var(--accent-hue));
+  --accent-ink: oklch(0.32 0.1 var(--accent-hue));
+
+  /* Status tokens — unified chroma/lightness so they harmonize */
+  --status-active-hue: 212;  /* cobalt — running */
+  --status-review-hue: 82;   /* amber — awaiting human */
+  --status-pending-hue: 264; /* iris — queued */
+  --status-done-hue: 155;    /* sage — complete */
+  --status-blocked-hue: 28;  /* ember — blocked/fail */
+
+  --status-active:  oklch(0.58 0.13 var(--status-active-hue));
+  --status-review:  oklch(0.62 0.13 var(--status-review-hue));
+  --status-pending: oklch(0.58 0.1 var(--status-pending-hue));
+  --status-done:    oklch(0.56 0.12 var(--status-done-hue));
+  --status-blocked: oklch(0.58 0.17 var(--status-blocked-hue));
+
+  /* Tinted backgrounds for status panels (operator brief, quote, etc.) */
+  --status-active-tint:  oklch(from var(--status-active)  l c h / 0.05);
+  --status-review-tint:  oklch(from var(--status-review)  l c h / 0.06);
+  --status-pending-tint: oklch(from var(--status-pending) l c h / 0.06);
+  --status-done-tint:    oklch(from var(--status-done)    l c h / 0.06);
+  --status-blocked-tint: oklch(from var(--status-blocked) l c h / 0.06);
+  --status-active-line:  oklch(from var(--status-active)  l c h / 0.35);
+
+  --shadow-xs: 0 1px 0 oklch(0.22 0.012 72 / 0.04);
+  --shadow-sm: 0 1px 2px oklch(0.22 0.012 72 / 0.06), 0 1px 0 oklch(1 0 0 / 0.6) inset;
+  --shadow-md: 0 4px 14px -6px oklch(0.22 0.012 72 / 0.1), 0 1px 0 oklch(1 0 0 / 0.6) inset;
+  --shadow-lg: 0 22px 60px -30px oklch(0.22 0.012 72 / 0.35), 0 1px 0 oklch(1 0 0 / 0.6) inset;
+
+  --grid-dot: oklch(0.36 0.012 72 / 0.05);
+}
+
+/* =========================================================================
+   DARK THEME — deep warm-graphite, designed first-class
+   ========================================================================= */
+html[data-theme="dark"] {
+  --bg: oklch(0.17 0.008 250);
+  --bg-sunk: oklch(0.14 0.008 250);
+  --surface: oklch(0.2 0.01 250);
+  --surface-2: oklch(0.23 0.01 250);
+  --surface-3: oklch(0.26 0.012 250);
+  --surface-raised: oklch(0.22 0.01 250);
+
+  --fg: oklch(0.96 0.006 90);
+  --fg-2: oklch(0.84 0.008 90);
+  --fg-3: oklch(0.66 0.012 90);
+  --fg-muted: oklch(0.52 0.012 90);
+  --fg-on-accent: oklch(0.14 0.008 250);
+
+  --line: oklch(1 0 0 / 0.1);
+  --line-2: oklch(1 0 0 / 0.06);
+  --line-strong: oklch(1 0 0 / 0.18);
+
+  --accent: oklch(var(--accent-l-dark) var(--accent-chroma) var(--accent-hue));
+  --accent-soft: oklch(0.3 0.06 var(--accent-hue));
+  --accent-ink: oklch(0.88 0.1 var(--accent-hue));
+
+  --status-active:  oklch(0.74 0.13 var(--status-active-hue));
+  --status-review:  oklch(0.8 0.13 var(--status-review-hue));
+  --status-pending: oklch(0.76 0.1 var(--status-pending-hue));
+  --status-done:    oklch(0.76 0.12 var(--status-done-hue));
+  --status-blocked: oklch(0.74 0.17 var(--status-blocked-hue));
+
+  --status-active-tint:  oklch(from var(--status-active)  l c h / 0.10);
+  --status-review-tint:  oklch(from var(--status-review)  l c h / 0.12);
+  --status-pending-tint: oklch(from var(--status-pending) l c h / 0.12);
+  --status-done-tint:    oklch(from var(--status-done)    l c h / 0.10);
+  --status-blocked-tint: oklch(from var(--status-blocked) l c h / 0.12);
+  --status-active-line:  oklch(from var(--status-active)  l c h / 0.40);
+
+  --shadow-xs: 0 1px 0 oklch(0 0 0 / 0.4);
+  --shadow-sm: 0 2px 6px oklch(0 0 0 / 0.45), 0 1px 0 oklch(1 0 0 / 0.05) inset;
+  --shadow-md: 0 8px 24px -8px oklch(0 0 0 / 0.55), 0 1px 0 oklch(1 0 0 / 0.06) inset;
+  --shadow-lg: 0 28px 80px -24px oklch(0 0 0 / 0.75), 0 1px 0 oklch(1 0 0 / 0.06) inset;
+
+  --grid-dot: oklch(1 0 0 / 0.05);
+}
+
+/* =========================================================================
+   Base
+   ========================================================================= */
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(circle at 8% 0%, oklch(from var(--accent) l c h / 0.08), transparent 40rem),
+    radial-gradient(circle at 92% 4%, oklch(from var(--accent) l c h / 0.05), transparent 34rem),
+    radial-gradient(circle, var(--grid-dot) 0.8px, transparent 0.8px),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-sunk) 100%);
+  background-size: auto, auto, 22px 22px, auto;
+  color: var(--fg);
+  font-feature-settings: "ss01", "cv11", "tnum";
+  letter-spacing: -0.005em;
+  transition: background-color var(--dur-med) var(--ease-out);
+}
+
+.font-mono, code, pre { font-feature-settings: "zero", "tnum" 1, "ss02"; }
+
+/* Scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: oklch(from var(--fg) l c h / 0.12);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: oklch(from var(--fg) l c h / 0.2); background-clip: padding-box; border: 2px solid transparent;}
+
+/* Animations */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70% { box-shadow: 0 0 0 6px transparent; opacity: 0.6; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+@keyframes scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
+.breathe { animation: breathe 2.2s ease-in-out infinite; }
+.blink { animation: blink 1s step-end infinite; }
+.fade-up { animation: fade-up var(--dur-slow) var(--ease-out) both; }
+
+/* Ambient scanning gradient for active chrome */
+.ambient-scan::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(from var(--status-active) l c h / 0.12) 50%,
+    transparent 100%
+  );
+  animation: scan 3.5s linear infinite;
+  pointer-events: none;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Selection */
+::selection { background: oklch(from var(--accent) l c h / 0.3); color: var(--fg); }
+
+/* Display type */
+.display-serif {
+  font-family: 'Newsreader', serif;
+  font-weight: 400;
+  letter-spacing: -0.022em;
+}
+
+/* Meter bar */
+.meter-track {
+  background: oklch(from var(--fg) l c h / 0.08);
+  border-radius: var(--radius-full);
+  height: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.meter-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--status-active);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* Diagonal hatch utility */
+.hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    oklch(from var(--fg) l c h / 0.035) 0 1px,
+    transparent 1px 6px
+  );
+}

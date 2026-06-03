@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rolling Search</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; background: #fafafa; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+    .search-container {
+      position: relative;
+      width: 234px;
+      height: 44px;
+    }
+
+    .gray-track {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      top: 1px;
+      left: 96px;
+      border-radius: 48px;
+      background: rgb(238, 238, 238);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .search-container.expanded .gray-track {
+      width: 234px;
+      height: 44px;
+      top: 0;
+      left: 0;
+    }
+
+    .search-input {
+      position: absolute;
+      left: 52px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: calc(100% - 100px);
+      border: none;
+      background: transparent;
+      font-size: 15px;
+      color: #333;
+      outline: none;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      caret-color: rgb(255, 97, 26);
+    }
+
+    .search-container.expanded .search-input {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .search-input::placeholder { color: #999; }
+
+    .shadow-layer-1 {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border-radius: 56px;
+      top: 6px;
+      left: 102px;
+      pointer-events: none;
+      transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: rgba(0, 0, 0, 0.247) 0.84px 0.84px 1.19px -0.625px, rgba(0, 0, 0, 0.24) 1.99px 1.99px 2.81px -1.25px, rgba(0, 0, 0, 0.23) 3.63px 3.63px 5.13px -1.875px, rgba(0, 0, 0, 0.22) 6.04px 6.04px 8.54px -2.5px, rgba(0, 0, 0, 0.2) 9.75px 9.75px 13.79px -3.125px, rgba(0, 0, 0, 0.17) 15.96px 15.96px 22.57px -3.75px, rgba(0, 0, 0, 0.114) 27.48px 27.48px 38.86px -4.375px, rgba(0, 0, 0, 0) 50px 50px 70.71px -5px;
+    }
+
+    .search-container.expanded .shadow-layer-1 { left: 198px; }
+
+    .shadow-layer-2 {
+      position: absolute;
+      width: 20px;
+      height: 19px;
+      border-radius: 56px;
+      top: 13px;
+      left: 103px;
+      pointer-events: none;
+      transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: rgba(0, 0, 0, 0.208) 1.51px 0.2px 0.61px -0.53px, rgba(0, 0, 0, 0.204) 3.58px 0.48px 1.45px -1.06px, rgba(0, 0, 0, 0.2) 6.54px 0.87px 2.64px -1.59px, rgba(0, 0, 0, 0.192) 10.87px 1.45px 4.38px -2.125px, rgba(0, 0, 0, 0.176) 17.55px 2.34px 7.08px -2.66px, rgba(0, 0, 0, 0.157) 28.72px 3.83px 11.59px -3.19px, rgba(0, 0, 0, 0.118) 49.46px 6.59px 19.96px -3.72px, rgba(0, 0, 0, 0.04) 90px 12px 36.32px -4.25px, rgba(0, 0, 0, 0.25) 10px 10px 24px 0px;
+    }
+
+    .search-container.expanded .shadow-layer-2 { left: 199px; }
+
+    .orange-ball {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      top: 0;
+      left: 96px;
+      border-radius: 50%;
+      overflow: hidden;
+      cursor: pointer;
+      transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      background: radial-gradient(50% 50% at 29.1% 29.7%, rgb(255, 150, 102) 0%, rgb(255, 97, 26) 100%);
+      box-shadow: rgba(232, 61, 23, 0.35) 0px 0px 0px -0.75px inset, rgba(232, 61, 23, 0.7) 0px 0px 0px -1.5px inset, rgba(0, 0, 0, 0.25) -2px -1px 4px 0px inset, rgba(204, 44, 16, 0.455) -0.66px -0.06px 0.53px -0.75px inset, rgba(204, 44, 16, 0.475) -2.52px -0.23px 2.02px -1.5px inset, rgba(204, 44, 16, 0.55) -11px -1px 8.84px -2.25px inset;
+    }
+
+    .search-container.expanded .orange-ball { left: 192px; }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      fill: rgb(252, 252, 250);
+      transition: opacity 0.2s ease;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .search-icon { opacity: 1; }
+    .search-container.expanded .search-icon { opacity: 0; }
+    .arrow-icon { opacity: 0; }
+    .search-container.expanded .arrow-icon { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="search-container" id="searchContainer">
+    <div class="gray-track"></div>
+    <div class="shadow-layer-1"></div>
+    <div class="shadow-layer-2"></div>
+    <input type="text" class="search-input" id="searchInput" placeholder="Search products...">
+    <div class="orange-ball" id="orangeBall">
+      <svg class="icon search-icon" viewBox="0 0 256 256"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></svg>
+      <svg class="icon arrow-icon" viewBox="0 0 256 256"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>
+    </div>
+  </div>
+
+  <script>
+    const searchContainer = document.getElementById('searchContainer');
+    const searchBall = document.getElementById('orangeBall');
+    const searchInput = document.getElementById('searchInput');
+
+    function expandSearch() {
+      searchContainer.classList.add('expanded');
+      searchInput.focus();
+    }
+
+    function collapseSearch() {
+      searchContainer.classList.remove('expanded');
+      searchInput.value = '';
+    }
+
+    searchBall.addEventListener('click', () => {
+      if (searchContainer.classList.contains('expanded')) {
+        console.log('Searching:', searchInput.value);
+      } else {
+        expandSearch();
+      }
+    });
+
+    searchInput.addEventListener('blur', () => setTimeout(collapseSearch, 150));
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') collapseSearch();
+    });
+  </script>
+</body>
+</html>

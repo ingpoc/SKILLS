@@ -1,0 +1,3 @@
+interface:
+  display_name: "Sample App Benchmark"
+  short_description: "Benchmark baseline vs challenger on a fresh sample app"

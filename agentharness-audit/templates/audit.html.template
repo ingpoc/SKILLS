@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent harness audit — {HARNESS_NAME}</title>
+<style>
+  :root {
+    /* Surface */
+    --ivory:    #FAF9F5;
+    --paper:    #FFFFFF;
+    --slate:    #141413;
+
+    /* Accent */
+    --clay:     #D97757;   /* primary accent — near target / focus */
+    --clay-d:   #B85C3E;
+    --oat:      #E3DACC;   /* tinted fill, hairline highlight */
+    --olive:    #788C5D;   /* target met (≥9.5) */
+    --rust:     #B04A3F;   /* far from target (<4.0) */
+
+    /* Neutral ramp */
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+
+    /* Type — system stacks, no CDN */
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans:  system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow-x: clip; }
+  body {
+    background: var(--ivory);
+    color: var(--gray-700);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 24px 120px;
+  }
+
+  /* ── layout ───────────────────────────── */
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 56px;
+  }
+  @media (max-width: 920px) { .page { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  /* ── sidebar nav ─────────────────────── */
+  nav.toc {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    font-size: 13px;
+  }
+  nav.toc .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+  }
+  nav.toc a {
+    display: block;
+    padding: 5px 0 5px 12px;
+    border-left: 2px solid var(--gray-300);
+    color: var(--gray-700);
+    text-decoration: none;
+  }
+  nav.toc a:hover { color: var(--slate); border-color: var(--slate); }
+  nav.toc a.active { color: var(--slate); border-color: var(--clay); }
+  nav.toc .files {
+    margin-top: 28px;
+    border-top: 1px solid var(--gray-300);
+    padding-top: 16px;
+  }
+  nav.toc .files code {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    padding: 3px 0;
+    background: none;
+  }
+
+  /* ── header ───────────────────────────── */
+  header.audit-head { margin-bottom: 24px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 24px;
+    height: 1.5px;
+    background: var(--clay);
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(28px, 4vw, 36px);
+    color: var(--slate);
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+    line-height: 1.15;
+  }
+  h1 em { font-style: italic; color: var(--clay); }
+  .audit-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── hero score block ─────────────────── */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+    margin: 28px 0 12px;
+  }
+  @media (max-width: 720px) { .hero { grid-template-columns: 1fr; gap: 18px; } }
+  .hero-score {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .hero-score .num {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(72px, 12vw, 112px);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: var(--slate);
+  }
+  .hero-score .num.met  { color: var(--olive); }
+  .hero-score .num.near { color: var(--clay); }
+  .hero-score .num.mute { color: var(--gray-500); }
+  .hero-score .num.far  { color: var(--rust); }
+  .hero-score .denom {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--gray-500);
+  }
+  .hero-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-top: 8px;
+  }
+  .hero-summary {
+    border-left: 3px solid var(--clay);
+    padding: 4px 0 4px 18px;
+    color: var(--gray-700);
+    font-size: 15.5px;
+    line-height: 1.65;
+    max-width: 540px;
+  }
+
+  /* ── stat tile row ────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 20px 0 8px;
+    max-width: 720px;
+  }
+  .stat {
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    background: var(--paper);
+    padding: 14px 16px;
+  }
+  .stat .num {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--slate);
+    letter-spacing: -0.01em;
+  }
+  .stat .lab {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-top: 4px;
+  }
+
+  /* ── section heads ────────────────────── */
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 22px;
+    color: var(--slate);
+    margin: 44px 0 14px;
+    scroll-margin-top: 24px;
+    letter-spacing: -0.005em;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 17px;
+    color: var(--slate);
+    margin: 22px 0 8px;
+  }
+  p { margin-bottom: 12px; max-width: 720px; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--slate); background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+
+  /* ── scorecard table ──────────────────── */
+  table.scorecard {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+    background: var(--paper);
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .scorecard th, .scorecard td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--gray-300);
+    vertical-align: middle;
+  }
+  .scorecard th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    background: var(--gray-150);
+    font-weight: 500;
+  }
+  .scorecard tr:last-child td { border-bottom: none; }
+  .scorecard td.id    { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); width: 3rem; }
+  .scorecard td.name  { color: var(--slate); }
+  .scorecard td.score { font-family: var(--mono); font-weight: 500; text-align: right; width: 3rem; white-space: nowrap; }
+  .scorecard td.cite  { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); max-width: 220px; overflow-wrap: anywhere; }
+  .scorecard td.gap   { font-family: var(--mono); font-size: 12px; text-align: right; width: 3.5rem; white-space: nowrap; }
+  .scorecard td.bar   { width: 130px; padding: 0 12px; }
+
+  .sc-score-met  { color: var(--olive); }
+  .sc-score-near { color: var(--clay); }
+  .sc-score-mute { color: var(--gray-500); }
+  .sc-score-far  { color: var(--rust); }
+  .gap-met  { color: var(--olive); }
+  .gap-near { color: var(--clay); }
+  .gap-mute { color: var(--gray-500); }
+  .gap-far  { color: var(--rust); }
+
+  .bar-track {
+    background: var(--gray-300);
+    height: 4px;
+    border-radius: 2px;
+    position: relative;
+    display: inline-block;
+    width: 100px;
+    vertical-align: middle;
+  }
+  .bar-fill {
+    position: absolute;
+    left: 0; top: 0;
+    height: 4px;
+    border-radius: 2px;
+  }
+  .bar-target {
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 10px;
+    background: var(--slate);
+    left: 95%;
+  }
+
+  /* ── priority stack ───────────────────── */
+  ul.priorities {
+    list-style: none;
+    border: 1.5px solid var(--gray-300);
+    border-radius: 10px;
+    background: var(--paper);
+    overflow: hidden;
+    margin: 14px 0;
+  }
+  ul.priorities li {
+    display: grid;
+    grid-template-columns: 56px 80px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--gray-300);
+  }
+  ul.priorities li:last-child { border-bottom: none; }
+  .pri-rank {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--gray-300);
+    letter-spacing: -0.03em;
+  }
+  .pri-gap {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--rust);
+    padding-top: 8px;
+  }
+  .pri-body { min-width: 0; }
+  .pri-title {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--slate);
+    margin-bottom: 4px;
+  }
+  .pri-action {
+    font-size: 13.5px;
+    color: var(--gray-700);
+    line-height: 1.55;
+  }
+
+  /* ── principle deep-dive ──────────────── */
+  .principle {
+    margin: 26px 0;
+    padding-top: 22px;
+    border-top: 1px solid var(--gray-300);
+  }
+  .principle .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 720px) { .principle .grid { grid-template-columns: 1fr; } }
+
+  .principle-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .principle-head .pid {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--gray-500);
+    letter-spacing: 0.04em;
+  }
+  .principle-head .pname {
+    font-family: var(--serif);
+    font-size: 18px;
+    color: var(--slate);
+  }
+  .principle-head .pname em { font-style: italic; color: var(--clay); }
+  .met-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--olive);
+    border: 1px solid var(--olive);
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* Info blocks — left-border-only, Tufte-minimal */
+  .info {
+    padding: 4px 0 4px 14px;
+    margin: 10px 0;
+    font-size: 14px;
+    line-height: 1.65;
+    border-left: 2px solid var(--gray-300);
+  }
+  .info .lab {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .info.found   { border-left-color: var(--gray-500); }
+  .info.missing { border-left-color: var(--rust); }
+  .info.missing .lab { color: var(--rust); }
+  .info.rec     { border-left-color: var(--clay); }
+  .info.rec .lab     { color: var(--clay); }
+
+  /* Arch block — the only filled block, soft oat tint */
+  .arch {
+    background: rgba(227,218,204,0.35);
+    border: 1.5px solid var(--oat);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .arch .lab {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--olive);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .arch .row { margin: 4px 0; }
+  .arch .row b { color: var(--slate); font-weight: 500; }
+  .arch .winner {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--gray-500);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  /* Margin column — score + citations */
+  .pmargin {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+  }
+  .pscore {
+    font-family: var(--serif);
+    font-size: 40px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 10px;
+  }
+  .pscore .denom { font-family: var(--mono); font-size: 13px; color: var(--gray-500); margin-left: 2px; }
+  .pscore.met  { color: var(--olive); }
+  .pscore.near { color: var(--clay); }
+  .pscore.mute { color: var(--gray-500); }
+  .pscore.far  { color: var(--rust); }
+
+  .mcites { font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
+  .mcite-group { margin-bottom: 10px; }
+  .htag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ivory);
+    background: var(--gray-500);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-bottom: 4px;
+  }
+  .mcite-item {
+    display: block;
+    color: var(--gray-700);
+    overflow-wrap: anywhere;
+    margin: 2px 0;
+  }
+
+  /* ── footer ──────────────────────────── */
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-300);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-500);
+    line-height: 1.65;
+  }
+
+  /* ── reduced motion ──────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ── print ───────────────────────────── */
+  @media print {
+    body { padding: 1rem; font-size: 12px; background: var(--paper); }
+    .page { grid-template-columns: 180px 1fr; gap: 28px; max-width: 100%; }
+    nav.toc { position: static; }
+    .principle { page-break-inside: avoid; }
+    .pmargin { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── sidebar nav ── -->
+  <nav class="toc">
+    <div class="label">On this page</div>
+    <a href="#summary">Overall</a>
+    <a href="#scorecard">Scorecard</a>
+    <a href="#priorities">Priorities</a>
+    <a href="#deepdives">Principle deep-dives</a>
+    <a href="#p01">P01 · Cache-Stable Prompt</a>
+    <a href="#p02">P02 · Deferred Context</a>
+    <a href="#p03">P03 · Mechanical Learning</a>
+    <a href="#p04">P04 · Strong Read Path</a>
+    <a href="#p05">P05 · {PRINCIPLE_NAME_5}</a>
+    <a href="#p06">P06 · {PRINCIPLE_NAME_6}</a>
+    <a href="#p07">P07 · {PRINCIPLE_NAME_7}</a>
+    <a href="#p08">P08 · {PRINCIPLE_NAME_8}</a>
+    <a href="#p09">P09 · {PRINCIPLE_NAME_9}</a>
+    <a href="#p10">P10 · {PRINCIPLE_NAME_10}</a>
+    <a href="#p11">P11 · {PRINCIPLE_NAME_11}</a>
+    <a href="#p12">P12 · {PRINCIPLE_NAME_12}</a>
+    <a href="#p13">P13 · {PRINCIPLE_NAME_13}</a>
+    <div class="files">
+      <div class="label">Files inspected</div>
+      <code>{KEY_FILE_1}</code>
+      <code>{KEY_FILE_2}</code>
+      <code>{KEY_FILE_3}</code>
+      <code>{KEY_FILE_4}</code>
+    </div>
+  </nav>
+
+  <!-- ── main ── -->
+  <main>
+    <header class="audit-head">
+      <div class="eyebrow">Agent harness audit · {AUDIT_DATE} · v1.0</div>
+      <h1>How <em>{HARNESS_NAME}</em> scores against the 13 quality principles</h1>
+      <div class="audit-meta">{ORG_NAME} · audited from working tree at {COMMIT_REF}</div>
+    </header>
+
+    <!-- ── hero score + summary ── -->
+    <section id="summary" class="hero">
+      <div>
+        <div class="hero-score">
+          <span class="num {OVERALL_SCORE_CLASS}">{OVERALL_SCORE}</span>
+          <span class="denom">/ 10</span>
+        </div>
+        <div class="hero-label">Overall · mean of 13 principles</div>
+      </div>
+      <div class="hero-summary">
+        {EXECUTIVE_SUMMARY}
+      </div>
+    </section>
+
+    <!-- ── headline tiles ── -->
+    <div class="stats">
+      <div class="stat"><div class="num">{COUNT_MET}</div><div class="lab">at target (≥9.5)</div></div>
+      <div class="stat"><div class="num">{COUNT_NEAR}</div><div class="lab">near (7.0–9.4)</div></div>
+      <div class="stat"><div class="num">{COUNT_MUTE}</div><div class="lab">mid (4.0–6.9)</div></div>
+      <div class="stat"><div class="num">{COUNT_FAR}</div><div class="lab">far (&lt;4.0)</div></div>
+    </div>
+
+    <!-- ── scorecard table ── -->
+    <h2 id="scorecard">Scorecard — all 13 principles</h2>
+    <p>Target is 9.5/10 on every principle (tick mark on bar). Bar fill = actual score. Citation = primary file:line evidence.</p>
+
+    <table class="scorecard">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Principle</th>
+          <th style="text-align:right">Score</th>
+          <th></th>
+          <th>Key citation</th>
+          <th style="text-align:right">Gap</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!--
+          One <tr> per principle. {SCORE_CLASS} ∈ met / near / mute / far.
+          {BAR_COLOR_TOKEN} = var(--olive) / var(--clay) / var(--gray-500) / var(--rust).
+          {GAP_CLASS} matches {SCORE_CLASS}.
+          {GAP} = "✓" when score ≥ 9.5, else "−X.X".
+        -->
+        <tr>
+          <td class="id">P01</td>
+          <td class="name">Cache-Stable System Prompt</td>
+          <td class="score sc-score-{SCORE_CLASS_P01}">{SCORE_P01}</td>
+          <td class="bar"><div class="bar-track"><div class="bar-fill" style="width:{BAR_PCT_P01}%; background:{BAR_COLOR_TOKEN_P01};"></div><div class="bar-target"></div></div></td>
+          <td class="cite">{KEY_CITATION_P01}</td>
+          <td class="gap gap-{SCORE_CLASS_P01}">{GAP_P01}</td>
+        </tr>
+        <!-- P02 … P13 follow the same shape -->
+      </tbody>
+    </table>
+
+    <!-- ── priority stack ── -->
+    <h2 id="priorities">Priority improvements</h2>
+    <p>Top 3 gaps ranked by distance from 9.5. Each one is a specific source change, not a direction.</p>
+
+    <ul class="priorities">
+      <li>
+        <span class="pri-rank">1</span>
+        <span class="pri-gap">gap {GAP_1}</span>
+        <div class="pri-body">
+          <div class="pri-title">{PRINCIPLE_ID_1} — {PRINCIPLE_NAME_1}</div>
+          <div class="pri-action">{ACTION_1}</div>
+        </div>
+      </li>
+      <li>
+        <span class="pri-rank">2</span>
+        <span class="pri-gap">gap {GAP_2}</span>
+        <div class="pri-body">
+          <div class="pri-title">{PRINCIPLE_ID_2} — {PRINCIPLE_NAME_2}</div>
+          <div class="pri-action">{ACTION_2}</div>
+        </div>
+      </li>
+      <li>
+        <span class="pri-rank">3</span>
+        <span class="pri-gap">gap {GAP_3}</span>
+        <div class="pri-body">
+          <div class="pri-title">{PRINCIPLE_ID_3} — {PRINCIPLE_NAME_3}</div>
+          <div class="pri-action">{ACTION_3}</div>
+        </div>
+      </li>
+    </ul>
+
+    <!-- ── principle deep-dives ── -->
+    <h2 id="deepdives">Principle deep-dives</h2>
+    <p>One block per principle. <code>Found</code> = what evidence the audit located; <code>Missing</code> = what would be needed to reach 9.5 (omitted when score is already 9.5); <code>To reach 9.5</code> = a concrete source change; <code>Canonical Architecture</code> = the reference pattern from `references/architecture.md` with winner citations.</p>
+
+    <!--
+      REPEAT this principle block 13 times (P01–P13). Notes:
+      · Add <span class="met-tag">TARGET MET</span> after .pname text when score ≥ 9.5.
+      · Omit the .info.missing block entirely when score ≥ 9.5.
+      · Use "To reach 9.5" as the .rec label when score < 9.5; "To maintain 9.5+" when score = 9.5.
+      · Inside .pmargin > .mcites, emit one .mcite-group per harness that has citations
+        for this principle (drawn from references/architecture.md § Winner Reference).
+    -->
+    <article class="principle" id="{PRINCIPLE_ID_LOWER}">
+      <div class="grid">
+        <div>
+          <div class="principle-head">
+            <span class="pid">{PRINCIPLE_ID}</span>
+            <span class="pname">{PRINCIPLE_NAME}<!-- <span class="met-tag">TARGET MET</span> --></span>
+          </div>
+
+          <div class="info found">
+            <div class="lab">Found</div>
+            {WHAT_WAS_FOUND_WITH_CODE_CITATIONS}
+          </div>
+
+          <!-- Include only when score < 9.5 -->
+          <div class="info missing">
+            <div class="lab">Missing</div>
+            {WHAT_IS_ABSENT}
+          </div>
+
+          <div class="info rec">
+            <div class="lab">{REC_LABEL}</div>
+            {SPECIFIC_RECOMMENDATION_WITH_FILE_LINE}
+          </div>
+
+          <div class="arch">
+            <div class="lab">Canonical architecture — {WINNER_LABEL}</div>
+            <div class="row"><b>Pattern:</b> {CANONICAL_PATTERN}</div>
+            <div class="row"><b>Anti-pattern:</b> {ANTI_PATTERN}</div>
+            <div class="row"><b>Rationale:</b> {DESIGN_RATIONALE}</div>
+            <span class="winner">Winner refs: {WINNER_CITATIONS_INLINE}</span>
+          </div>
+        </div>
+
+        <aside class="pmargin">
+          <div class="pscore {SCORE_CLASS}">{SCORE}<span class="denom">/10</span></div>
+          <div class="mcites">
+            <!-- One .mcite-group per harness with citations for this principle.
+                 Omit harnesses with no citation for this principle. -->
+            <div class="mcite-group">
+              <span class="htag">{HARNESS_TAG_1}</span>
+              <span class="mcite-item">{FILE_LINE_1A}</span>
+              <span class="mcite-item">{FILE_LINE_1B}</span>
+            </div>
+            <!-- ...additional .mcite-group blocks... -->
+          </div>
+        </aside>
+      </div>
+    </article>
+    <!-- ...repeat for P02 … P13... -->
+
+    <footer>
+      Generated by agentharness-audit v1.0 on {AUDIT_DATE}. Evidence source: direct codebase inspection of {KEY_FILES_INSPECTED}. Comparative baseline: Hermes · Claude Code · Codex CLI.
+    </footer>
+  </main>
+</div>
+
+<script>
+// Active-link highlighter for sidebar TOC via IntersectionObserver
+const links = document.querySelectorAll("nav.toc a[href^='#']");
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.toggle("active",
+        l.getAttribute("href") === "#" + e.target.id));
+    }
+  });
+}, { rootMargin: "-40% 0px -50% 0px" });
+links.forEach(a => {
+  const el = document.getElementById(a.getAttribute("href").slice(1));
+  if (el) obs.observe(el);
+});
+</script>
+</body>
+</html>

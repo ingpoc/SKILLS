@@ -1,0 +1,1677 @@
+<!-- AGENT_FEEDBACK_WIDGET_START -->
+<style>
+  .af-root {
+    --af-bg: #171613;
+    --af-panel: rgba(255, 255, 255, 0.96);
+    --af-ink: #141413;
+    --af-muted: #77746b;
+    --af-line: rgba(20, 20, 19, 0.12);
+    --af-accent: #d97757;
+    --af-ok: #788c5d;
+    --af-warn: #b04a3f;
+    --af-glass: rgba(255, 255, 255, 0.76);
+    --af-shadow: 0 18px 46px rgba(20, 20, 19, 0.14), 0 1px 0 rgba(255,255,255,0.7) inset;
+    color: var(--af-ink);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  .af-toolbar {
+    position: fixed;
+    right: 14px;
+    top: 52px;
+    z-index: 2147483000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--af-line);
+    border-radius: 16px;
+    background: var(--af-glass);
+    box-shadow: var(--af-shadow);
+    backdrop-filter: blur(18px) saturate(1.1);
+    transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+  }
+
+  .af-launcher {
+    position: fixed;
+    right: 14px;
+    top: 12px;
+    z-index: 2147483000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--af-line);
+    border-radius: 13px;
+    background: var(--af-glass);
+    color: var(--af-ink);
+    cursor: pointer;
+    box-shadow: var(--af-shadow);
+    backdrop-filter: blur(18px) saturate(1.1);
+    transition: background 140ms ease, color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+  }
+
+  .af-launcher:hover,
+  .af-launcher[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.94);
+    transform: translateY(-1px);
+  }
+
+  .af-launcher svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .af-launcher::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 17px;
+    height: 17px;
+    border: 2px solid var(--af-ink);
+    border-radius: 999px;
+    background:
+      linear-gradient(var(--af-ink), var(--af-ink)) center / 8px 2px no-repeat,
+      linear-gradient(var(--af-ink), var(--af-ink)) center / 2px 8px no-repeat;
+    opacity: 0.94;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+  }
+
+  .af-root svg {
+    display: block !important;
+    flex: 0 0 auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    color: currentColor !important;
+    stroke: currentColor !important;
+    fill: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .af-root svg path,
+  .af-root svg circle,
+  .af-root svg line,
+  .af-root svg polyline,
+  .af-root svg polygon,
+  .af-root svg rect {
+    stroke: currentColor !important;
+    stroke-width: 1.9 !important;
+    fill: none !important;
+    stroke-linecap: round !important;
+    stroke-linejoin: round !important;
+    opacity: 1 !important;
+    transform: none !important;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .af-launcher > svg {
+    opacity: 0 !important;
+  }
+
+  .af-toolbar.af-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px) scale(0.96);
+  }
+
+  .af-toolbar:hover,
+  .af-toolbar:focus-within {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: var(--af-shadow);
+  }
+
+  .af-button {
+    position: relative;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--af-ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font: 650 13px/1 system-ui, -apple-system, sans-serif;
+    transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  .af-button svg {
+    width: 16.5px !important;
+    height: 16.5px !important;
+  }
+
+  .af-button:hover,
+  .af-button[aria-pressed="true"] {
+    background: rgba(20, 20, 19, 0.075);
+    color: var(--af-ink);
+    transform: none;
+  }
+
+  .af-button:focus-visible,
+  .af-count:focus-visible,
+  .af-launcher:focus-visible,
+  .af-agent-status:focus-visible {
+    outline: 2px solid rgba(217, 119, 87, 0.55);
+    outline-offset: 2px;
+  }
+
+  .af-button[data-af-label]::after,
+  .af-count[data-af-label]::after,
+  .af-launcher::after {
+    position: absolute;
+    right: calc(100% + 9px);
+    top: 50%;
+    transform: translateY(-50%) translateX(4px);
+    opacity: 0;
+    pointer-events: none;
+    content: attr(data-af-label);
+    white-space: nowrap;
+    border: 1px solid rgba(20,20,19,0.09);
+    border-radius: 999px;
+    padding: 6px 9px;
+    background: rgba(255,255,255,0.96);
+    color: var(--af-ink);
+    box-shadow: 0 10px 26px rgba(20,20,19,0.12);
+    font: 600 12px/1 system-ui, -apple-system, sans-serif;
+    transition: opacity 130ms ease, transform 130ms ease;
+  }
+
+  .af-launcher::after {
+    content: "Agent feedback";
+  }
+
+  .af-button[data-af-label]:hover::after,
+  .af-count[data-af-label]:hover::after,
+  .af-launcher:hover::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+
+  .af-button.af-clear {
+    background: transparent;
+    color: var(--af-ink);
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .af-button.af-clear:hover {
+    background: rgba(176, 74, 63, 0.1);
+    color: var(--af-warn);
+  }
+
+  .af-text-action {
+    width: auto;
+    min-width: 0;
+    padding: 0 12px;
+    border: 1px solid rgba(20, 20, 19, 0.1);
+    background: var(--af-bg);
+    color: #fff;
+    font-size: 12px;
+  }
+
+  .af-text-action:hover {
+    background: #000;
+    color: #fff;
+  }
+
+  .af-button.af-stealth {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    opacity: 1;
+    background: transparent;
+    color: var(--af-muted);
+  }
+
+  .af-count {
+    position: relative;
+    border: 0;
+    min-width: 32px;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 10px;
+    background: rgba(217, 119, 87, 0.12);
+    color: var(--af-accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: 750 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+  }
+
+  .af-count:hover {
+    background: rgba(217, 119, 87, 0.18);
+  }
+
+  .af-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147482500;
+  }
+
+  .af-layer.af-armed {
+    cursor: crosshair;
+    pointer-events: auto;
+  }
+
+  .af-hover-box,
+  .af-select-box {
+    position: absolute;
+    border: 1.5px solid rgba(217, 119, 87, 0.84);
+    border-radius: 10px;
+    background: rgba(217, 119, 87, 0.075);
+    box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.09);
+    pointer-events: none;
+    display: none;
+    z-index: 2147482600;
+  }
+
+  .af-select-box {
+    display: block;
+  }
+
+  .af-marker {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    border: 2px solid rgba(255,255,255,0.95);
+    border-radius: 999px;
+    background: var(--af-bg);
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(20, 20, 19, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  .af-drawer {
+    display: none !important;
+  }
+
+  .af-drawer.af-open {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+  }
+
+  .af-drawer.af-open.af-minimized {
+    display: none;
+  }
+
+  .af-popover {
+    position: absolute;
+    z-index: 2147483003;
+    width: min(390px, calc(100vw - 28px));
+    border: 1px solid var(--af-line);
+    border-radius: 20px;
+    background: var(--af-panel);
+    box-shadow: var(--af-shadow);
+    backdrop-filter: blur(18px);
+    display: none;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  .af-popover.af-open {
+    display: block;
+  }
+
+  .af-popover-shell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 6px;
+    background: rgba(255,255,255,0.9);
+  }
+
+  .af-popover-config,
+  .af-popover-mic,
+  .af-popover-send,
+  .af-popover-close {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--af-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  .af-popover-config {
+    background: rgba(20,20,19,0.06);
+    color: var(--af-ink);
+  }
+
+  .af-popover-config:hover,
+  .af-popover.af-expanded .af-popover-config,
+  .af-popover-mic:hover,
+  .af-popover-close:hover {
+    background: rgba(20,20,19,0.1);
+    color: var(--af-ink);
+  }
+
+  .af-popover-config:hover,
+  .af-popover.af-expanded .af-popover-config {
+    transform: translateY(-1px);
+  }
+
+  .af-popover-send {
+    background: var(--af-bg);
+    color: #fff;
+  }
+
+  .af-popover-send:hover {
+    background: #000;
+  }
+
+  .af-popover svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .af-popover-input-row {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .af-popover input,
+  .af-popover textarea {
+    width: 100%;
+    border: 0;
+    outline: none;
+    font: 14px/1.4 system-ui, -apple-system, sans-serif;
+    background: transparent;
+    color: var(--af-ink);
+  }
+
+  .af-popover input {
+    height: 32px;
+    min-width: 0;
+  }
+
+  .af-popover input::placeholder,
+  .af-popover textarea::placeholder {
+    color: rgba(119,116,107,0.58);
+  }
+
+  .af-popover-body {
+    display: none;
+    border-top: 1px solid rgba(20,20,19,0.08);
+    background: rgba(250,249,245,0.74);
+  }
+
+  .af-popover.af-expanded .af-popover-body {
+    display: block;
+  }
+
+  .af-popover-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px 0;
+  }
+
+  .af-popover-tools {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .af-thread-delete {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--af-muted);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .af-popover.af-expanded .af-thread-delete.af-show {
+    display: inline-flex;
+  }
+
+  .af-thread-delete:hover {
+    background: rgba(176,74,63,0.1);
+    color: var(--af-warn);
+  }
+
+  .af-tab {
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 11px;
+    background: transparent;
+    color: var(--af-muted);
+    cursor: pointer;
+    font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+  }
+
+  .af-tab[aria-selected="true"] {
+    background: #fff;
+    color: var(--af-ink);
+    box-shadow: 0 1px 0 rgba(20,20,19,0.08), 0 0 0 1px rgba(20,20,19,0.08);
+  }
+
+  .af-tab-panel {
+    display: none;
+    padding: 10px;
+  }
+
+  .af-tab-panel.af-active {
+    display: block;
+  }
+
+  .af-thread-log {
+    max-height: 260px;
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+    padding: 2px 0 0;
+  }
+
+  .af-thread-empty {
+    color: var(--af-muted);
+    font-size: 13px;
+    padding: 8px 2px;
+  }
+
+  .af-msg {
+    position: relative;
+    max-width: 86%;
+    border: 1px solid rgba(20,20,19,0.08);
+    border-radius: 14px;
+    padding: 9px 10px;
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 6px 18px rgba(20,20,19,0.05);
+  }
+
+  .af-msg-user {
+    justify-self: end;
+    background: rgba(217,119,87,0.11);
+    border-color: rgba(217,119,87,0.16);
+  }
+
+  .af-msg-agent {
+    justify-self: start;
+  }
+
+  .af-msg-meta {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--af-muted);
+    font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+  }
+
+  .af-msg-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    line-height: 1.38;
+  }
+
+  .af-msg-done .af-msg-meta::before {
+    content: "✓";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-right: 5px;
+    border-radius: 999px;
+    background: #2f80ed;
+    color: #fff;
+    font: 800 9px/1 system-ui, -apple-system, sans-serif;
+    vertical-align: -1px;
+  }
+
+  .af-msg-delete {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--af-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease, background 120ms ease;
+  }
+
+  .af-msg:hover .af-msg-delete,
+  .af-msg:focus-within .af-msg-delete {
+    opacity: 1;
+  }
+
+  .af-msg-delete:hover {
+    background: rgba(20,20,19,0.08);
+    color: var(--af-ink);
+  }
+
+  .af-thread-hint {
+    color: var(--af-muted);
+    font-size: 12px;
+  }
+
+  .af-ui-panel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .af-ui-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    color: var(--af-ink);
+    font: 700 13px/1.2 system-ui, -apple-system, sans-serif;
+  }
+
+  .af-ui-menu {
+    color: var(--af-muted);
+    font: 700 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .af-ui-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .af-ui-selected {
+    border: 1px solid rgba(20,20,19,0.08);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.78);
+    padding: 9px 10px;
+    color: var(--af-muted);
+    font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow-wrap: anywhere;
+  }
+
+  .af-ui-row {
+    display: grid;
+    grid-template-columns: 116px 1fr;
+    align-items: center;
+    gap: 9px;
+    color: var(--af-muted);
+    font-size: 13px;
+  }
+
+  .af-ui-value {
+    min-height: 30px;
+    border: 1px solid rgba(20,20,19,0.08);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.78);
+    color: var(--af-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 10px;
+    overflow: hidden;
+  }
+
+  .af-ui-value span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .af-color-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 7px;
+    border: 1px solid rgba(20,20,19,0.12);
+    background: var(--af-dot, #141413);
+    flex: 0 0 auto;
+  }
+
+  .af-head,
+  .af-composer,
+  .af-status {
+    padding: 14px;
+    border-bottom: 1px solid rgba(20,20,19,0.08);
+  }
+
+  .af-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .af-title {
+    margin: 0;
+    font: 720 14px/1.2 system-ui, -apple-system, sans-serif;
+  }
+
+  .af-subtitle {
+    margin: 4px 0 0;
+    color: var(--af-muted);
+    font-size: 12px;
+  }
+
+  .af-list {
+    overflow: auto;
+    padding: 12px;
+    background: rgba(250, 249, 245, 0.82);
+  }
+
+  .af-card {
+    border: 1px solid rgba(20,20,19,0.09);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.84);
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  .af-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: var(--af-muted);
+    font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+  }
+
+  .af-card p {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .af-card small {
+    display: block;
+    color: var(--af-muted);
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .af-composer {
+    display: grid;
+    gap: 8px;
+    background: #fff;
+  }
+
+  .af-input {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    border: 1px solid rgba(20,20,19,0.1);
+    border-radius: 12px;
+    padding: 11px 12px;
+    font: 14px/1.4 system-ui, -apple-system, sans-serif;
+  }
+
+  .af-status {
+    border-bottom: 0;
+    border-top: 1px solid var(--af-line);
+    color: var(--af-muted);
+    font-size: 12px;
+    background: rgba(255,255,255,0.78);
+  }
+
+  .af-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 78px;
+    z-index: 2147483002;
+    transform: translateX(-50%);
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: var(--af-bg);
+    color: #fff;
+    box-shadow: var(--af-shadow);
+    display: none;
+    font: 600 13px/1.2 system-ui, -apple-system, sans-serif;
+  }
+
+  .af-agent-status {
+    position: fixed;
+    right: 56px;
+    top: 12px;
+    z-index: 2147483000;
+    max-width: min(340px, calc(100vw - 72px));
+    min-height: 34px;
+    border: 1px solid rgba(20, 20, 19, 0.1);
+    border-radius: 999px;
+    background: var(--af-panel);
+    color: var(--af-ink);
+    box-shadow: 0 10px 28px rgba(20, 20, 19, 0.1);
+    backdrop-filter: blur(14px);
+    padding: 0 13px;
+    font: 13px/1 system-ui, -apple-system, sans-serif;
+    display: none;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .af-agent-status.af-show {
+    display: inline-flex;
+    animation: af-rise 180ms ease;
+  }
+
+  .af-agent-status strong {
+    display: inline;
+    margin: 0;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .af-agent-status span {
+    color: var(--af-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .af-toast.af-show {
+    display: block;
+    animation: af-rise 160ms ease;
+  }
+
+  @keyframes af-rise {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+<div class="af-root" data-agent-feedback>
+  <button class="af-launcher" type="button" data-af-launcher aria-pressed="false" data-af-label="Agent feedback" title="Agent feedback" aria-label="Toggle agent feedback controls">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="6"/><path d="m15.5 8.5-7 7"/><path d="m10 8.5h5.5V14"/></svg>
+  </button>
+  <button class="af-agent-status" type="button" data-af-agent-status aria-label="Open agent feedback status"></button>
+  <div class="af-layer" data-af-layer aria-hidden="true"></div>
+  <div class="af-hover-box" data-af-hover></div>
+  <div class="af-popover" data-af-popover>
+    <div class="af-popover-shell">
+      <button class="af-popover-config" type="button" data-af-popover-config aria-expanded="false" aria-label="Show item tools">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+      <div class="af-popover-input-row">
+        <input data-af-popover-input type="text" placeholder="Add a comment..." autocomplete="off">
+        <button class="af-popover-mic" type="button" aria-label="Voice note">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>
+        </button>
+        <button class="af-popover-send" type="button" data-af-popover-save aria-label="Send item message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-7 14-2-5-5-2Z"/><path d="m10 14 4-4"/></svg>
+        </button>
+        <button class="af-popover-close" type="button" data-af-popover-close aria-label="Close item chat">×</button>
+      </div>
+    </div>
+    <div class="af-popover-body" data-af-popover-body>
+      <div class="af-popover-tabs" role="tablist" aria-label="Item feedback tools">
+        <button class="af-tab" type="button" data-af-tab="agent" role="tab" aria-selected="true">Agent</button>
+        <button class="af-tab" type="button" data-af-tab="ui" role="tab" aria-selected="false">UI</button>
+        <span class="af-popover-tools">
+          <button class="af-thread-delete" type="button" data-af-thread-delete aria-label="Delete this marker">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+          </button>
+        </span>
+      </div>
+      <div class="af-tab-panel af-active" data-af-panel="agent" role="tabpanel">
+        <div class="af-thread-log" data-af-thread-log></div>
+        <div class="af-thread-hint" data-af-thread-hint>Thread stays attached to this marker.</div>
+      </div>
+      <div class="af-tab-panel" data-af-panel="ui" role="tabpanel">
+        <div class="af-ui-panel">
+          <div class="af-ui-head"><span data-af-ui-tag>element</span><span class="af-ui-menu">⋮</span></div>
+          <div class="af-ui-selected" data-af-ui-selected>Selected item unavailable.</div>
+          <div class="af-ui-grid">
+            <div class="af-ui-row"><span>Text color</span><div class="af-ui-value"><i class="af-color-dot" data-af-ui-text-dot></i><span data-af-ui-color>rgb(20, 20, 19)</span></div></div>
+            <div class="af-ui-row"><span>Background</span><div class="af-ui-value"><i class="af-color-dot" data-af-ui-bg-dot></i><span data-af-ui-bg>rgb(255, 255, 255)</span></div></div>
+            <div class="af-ui-row"><span>Opacity</span><div class="af-ui-value"><span data-af-ui-opacity>1</span></div></div>
+            <div class="af-ui-row"><span>Font</span><div class="af-ui-value"><span data-af-ui-font>system-ui</span></div></div>
+            <div class="af-ui-row"><span>Font size</span><div class="af-ui-value"><span data-af-ui-size>14px</span></div></div>
+            <div class="af-ui-row"><span>Font weight</span><div class="af-ui-value"><span data-af-ui-weight>400</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="af-drawer" data-af-drawer aria-label="Artifact feedback">
+    <div class="af-head">
+      <div>
+        <p class="af-title">Artifact feedback</p>
+        <p class="af-subtitle" data-af-context>Click Annotate, then click the page.</p>
+      </div>
+      <button class="af-button" type="button" data-af-close data-af-label="Close" aria-label="Close feedback panel">×</button>
+    </div>
+    <div class="af-composer">
+      <textarea class="af-input" data-af-input placeholder="Describe the change for the selected spot"></textarea>
+      <button class="af-button af-text-action" type="button" data-af-save>Save comment</button>
+    </div>
+    <div class="af-list" data-af-list></div>
+    <div class="af-status" data-af-status>No feedback sent yet.</div>
+  </aside>
+  <div class="af-toolbar af-hidden" data-af-toolbar role="toolbar" aria-label="Agent feedback controls">
+    <button class="af-button" type="button" data-af-toggle aria-pressed="false" data-af-label="Annotate" title="Annotate" aria-label="Annotate">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/></svg>
+    </button>
+    <button class="af-count" type="button" data-af-count data-af-label="Inbox" title="Open feedback inbox" aria-label="Open feedback inbox">0</button>
+    <button class="af-button af-clear" type="button" data-af-clear data-af-label="Clear markers" title="Clear all markers" aria-label="Clear all feedback markers">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+    </button>
+    <button class="af-button af-stealth" type="button" data-af-menu data-af-label="Feedback" title="Open feedback inbox" aria-label="Open feedback inbox">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+    </button>
+  </div>
+  <div class="af-toast" data-af-toast></div>
+</div>
+<script>
+(() => {
+  const root = document.querySelector("[data-agent-feedback]");
+  if (!root || window.__agentFeedbackLoaded) return;
+  window.__agentFeedbackLoaded = true;
+
+  const artifactPath = location.pathname;
+  const storageKey = `agent-feedback:${artifactPath}`;
+  const layer = root.querySelector("[data-af-layer]");
+  const launcher = root.querySelector("[data-af-launcher]");
+  const agentStatus = root.querySelector("[data-af-agent-status]");
+  const hoverBox = root.querySelector("[data-af-hover]");
+  const popover = root.querySelector("[data-af-popover]");
+  const threadLog = root.querySelector("[data-af-thread-log]");
+  const threadHint = root.querySelector("[data-af-thread-hint]");
+  const popoverInput = root.querySelector("[data-af-popover-input]");
+  const popoverSave = root.querySelector("[data-af-popover-save]");
+  const popoverClose = root.querySelector("[data-af-popover-close]");
+  const popoverConfig = root.querySelector("[data-af-popover-config]");
+  const threadDelete = root.querySelector("[data-af-thread-delete]");
+  const popoverTabs = Array.from(root.querySelectorAll("[data-af-tab]"));
+  const popoverPanels = Array.from(root.querySelectorAll("[data-af-panel]"));
+  const uiTag = root.querySelector("[data-af-ui-tag]");
+  const uiSelected = root.querySelector("[data-af-ui-selected]");
+  const uiColor = root.querySelector("[data-af-ui-color]");
+  const uiBg = root.querySelector("[data-af-ui-bg]");
+  const uiOpacity = root.querySelector("[data-af-ui-opacity]");
+  const uiFont = root.querySelector("[data-af-ui-font]");
+  const uiSize = root.querySelector("[data-af-ui-size]");
+  const uiWeight = root.querySelector("[data-af-ui-weight]");
+  const uiTextDot = root.querySelector("[data-af-ui-text-dot]");
+  const uiBgDot = root.querySelector("[data-af-ui-bg-dot]");
+  const drawer = root.querySelector("[data-af-drawer]");
+  const toggle = root.querySelector("[data-af-toggle]");
+  const count = root.querySelector("[data-af-count]");
+  const clear = root.querySelector("[data-af-clear]");
+  const menu = root.querySelector("[data-af-menu]");
+  const input = root.querySelector("[data-af-input]");
+  const save = root.querySelector("[data-af-save]");
+  const list = root.querySelector("[data-af-list]");
+  const status = root.querySelector("[data-af-status]");
+  const context = root.querySelector("[data-af-context]");
+  const toast = root.querySelector("[data-af-toast]");
+  const close = root.querySelector("[data-af-close]");
+
+  let armed = false;
+  let activeId = null;
+  let pendingComment = null;
+  let hoverTarget = null;
+  let visible = new URLSearchParams(location.search).get("agent-feedback") === "on"
+    || localStorage.getItem(`${storageKey}:enabled`) === "true";
+  let lastStatusText = "";
+  let comments = load();
+
+  function load() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function persist() {
+    localStorage.setItem(storageKey, JSON.stringify(comments));
+  }
+
+  function makeId() {
+    return `af-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function normalizeThread(thread) {
+    if (!Array.isArray(thread.messages)) {
+      thread.messages = [];
+      if (thread.text && thread.text.trim()) {
+        thread.messages.push({
+          id: makeId(),
+          role: "user",
+          text: thread.text.trim(),
+          status: thread.status || "draft",
+          batchId: thread.batchId,
+          createdAt: thread.updatedAt || thread.createdAt || new Date().toISOString()
+        });
+      }
+    }
+    thread.text = thread.messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.text)
+      .filter(Boolean)
+      .at(-1) || "";
+    return thread;
+  }
+
+  function activeThread() {
+    if (pendingComment && activeId === pendingComment.id) return pendingComment;
+    return comments.find((item) => item.id === activeId);
+  }
+
+  function commitPending(comment) {
+    if (!pendingComment || pendingComment.id !== comment.id) return false;
+    comments.push(comment);
+    pendingComment = null;
+    activeId = comment.id;
+    return true;
+  }
+
+  function messageLabel(message) {
+    if (message.role === "agent") return message.status ? `Agent · ${message.status}` : "Agent";
+    if (message.status === "done") return "You · processed";
+    return message.status ? `You · ${message.status}` : "You";
+  }
+
+  function canDeleteMessage(message) {
+    return message.role === "user" && ["draft", "queued"].includes(message.status || "draft");
+  }
+
+  async function deleteMessage(threadId, messageId) {
+    const thread = comments.find((item) => item.id === threadId);
+    if (!thread) return;
+    normalizeThread(thread);
+    const message = thread.messages.find((item) => item.id === messageId);
+    if (!message || !canDeleteMessage(message)) return;
+
+    if (message.batchId && message.status === "queued") {
+      try {
+        const response = await fetch(`/api/feedback/message?batch=${encodeURIComponent(message.batchId)}&message=${encodeURIComponent(message.id)}`, {
+          method: "DELETE"
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          showToast(result.error === "already_processing" ? "Agent already processed it" : "Delete failed");
+          return;
+        }
+      } catch {
+        showToast("Delete failed");
+        return;
+      }
+    }
+
+    thread.messages = thread.messages.filter((item) => item.id !== messageId);
+    thread.text = thread.messages.filter((item) => item.role === "user").map((item) => item.text).filter(Boolean).at(-1) || "";
+    if (!thread.messages.length) {
+      comments = comments.filter((item) => item.id !== thread.id);
+      if (activeId === thread.id) {
+        activeId = null;
+        popover.classList.remove("af-open");
+      }
+      if (pendingComment?.id === thread.id) pendingComment = null;
+    } else {
+      thread.status = thread.messages.at(-1)?.status || "draft";
+      delete thread.batchId;
+    }
+    persist();
+    render();
+    if (activeId === thread.id) renderThread(thread);
+    showToast("Message deleted");
+  }
+
+  async function deleteThread(threadId) {
+    const thread = pendingComment?.id === threadId ? pendingComment : comments.find((item) => item.id === threadId);
+    if (!thread) return;
+    normalizeThread(thread);
+    for (const message of thread.messages) {
+      if (message.role === "user" && message.status === "queued" && message.batchId) {
+        try {
+          await fetch(`/api/feedback/message?batch=${encodeURIComponent(message.batchId)}&message=${encodeURIComponent(message.id)}`, {
+            method: "DELETE"
+          });
+        } catch {
+          // Best effort only. Processed conversations can still be removed locally.
+        }
+      }
+    }
+    comments = comments.filter((item) => item.id !== threadId);
+    if (pendingComment?.id === threadId) pendingComment = null;
+    if (activeId === threadId) activeId = null;
+    persist();
+    render();
+    closePopover();
+    showToast("Marker deleted");
+  }
+
+  async function clearAllThreads() {
+    const queuedMessages = comments.flatMap((thread) => normalizeThread(thread).messages)
+      .filter((message) => message.role === "user" && message.status === "queued" && message.batchId);
+    await Promise.allSettled(queuedMessages.map((message) => (
+      fetch(`/api/feedback/message?batch=${encodeURIComponent(message.batchId)}&message=${encodeURIComponent(message.id)}`, {
+        method: "DELETE"
+      })
+    )));
+    comments = [];
+    pendingComment = null;
+    activeId = null;
+    persist();
+    closePopover();
+    render();
+    showToast("All markers cleared");
+  }
+
+  function renderThread(thread) {
+    normalizeThread(thread);
+    threadLog.innerHTML = "";
+    if (!thread.messages.length) {
+      const empty = document.createElement("div");
+      empty.className = "af-thread-empty";
+      empty.textContent = "Start a focused chat about this item.";
+      threadLog.append(empty);
+    }
+    thread.messages.forEach((message) => {
+      const bubble = document.createElement("div");
+      bubble.className = `af-msg af-msg-${message.role === "agent" ? "agent" : "user"} ${message.status === "done" ? "af-msg-done" : ""}`;
+      bubble.innerHTML = "<span class=\"af-msg-meta\"></span><div class=\"af-msg-text\"></div>";
+      bubble.querySelector(".af-msg-meta").textContent = messageLabel(message);
+      bubble.querySelector(".af-msg-text").textContent = message.text || "";
+      if (canDeleteMessage(message)) {
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "af-msg-delete";
+        del.setAttribute("aria-label", "Delete queued message");
+        del.textContent = "×";
+        del.addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteMessage(thread.id, message.id);
+        });
+        bubble.append(del);
+      }
+      threadLog.append(bubble);
+    });
+    threadLog.scrollTop = threadLog.scrollHeight;
+    threadHint.textContent = "Chat stays attached to this marker.";
+    threadDelete.classList.toggle("af-show", thread.messages.length > 0 && !pendingComment);
+  }
+
+  async function sendThreads(threads) {
+    const ready = threads
+      .map((thread) => normalizeThread(thread))
+      .map((thread) => ({
+        thread,
+        unsent: thread.messages.filter((message) => message.role === "user" && message.text.trim() && !message.batchId)
+      }))
+      .filter((entry) => entry.unsent.length);
+
+    if (!ready.length) {
+      showToast("Add a message first");
+      return null;
+    }
+
+    const payload = {
+      artifactPath,
+      artifactTitle: document.title,
+      artifactVersion: document.querySelector("meta[name='agent-feedback-version']")?.content || "unversioned",
+      sentAt: new Date().toISOString(),
+      comments: ready.map(({ thread, unsent }) => ({
+        ...thread,
+        text: unsent.map((message) => message.text).join("\n\n"),
+        messages: unsent
+      }))
+    };
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      ready.forEach(({ thread, unsent }) => {
+        const workItem = (result.items || []).find((item) => item.markerId === thread.id || item.marker?.id === thread.id) || result;
+        thread.status = "queued";
+        unsent.forEach((message) => {
+          message.status = "queued";
+          message.batchId = workItem.id;
+        });
+      });
+      persist();
+      render();
+      if (activeId) {
+        const active = activeThread();
+        if (active) renderThread(active);
+      }
+      showToast("Sent to agent");
+      return result;
+    } catch {
+      showToast("Send failed");
+      return null;
+    }
+  }
+
+  function cssPath(el) {
+    if (!el || !el.tagName || el === document.body) return "body";
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.body && parts.length < 5) {
+      let part = node.tagName.toLowerCase();
+      if (node.classList.length) part += `.${Array.from(node.classList).slice(0, 2).map(CSS.escape).join(".")}`;
+      const parent = node.parentElement;
+      if (parent) {
+        const same = Array.from(parent.children).filter((child) => child.tagName === node.tagName);
+        if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
+      }
+      parts.unshift(part);
+      node = parent;
+    }
+    return parts.join(" > ") || "body";
+  }
+
+  function uiSnapshot(el) {
+    const style = window.getComputedStyle(el);
+    return {
+      tag: el.tagName.toLowerCase(),
+      color: style.color,
+      backgroundColor: style.backgroundColor,
+      opacity: style.opacity,
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight
+    };
+  }
+
+  function setTab(name) {
+    popoverTabs.forEach((tab) => {
+      tab.setAttribute("aria-selected", String(tab.dataset.afTab === name));
+    });
+    popoverPanels.forEach((panel) => {
+      panel.classList.toggle("af-active", panel.dataset.afPanel === name);
+    });
+  }
+
+  function expandPopover(tab = "agent") {
+    popover.classList.add("af-expanded");
+    popoverConfig.setAttribute("aria-expanded", "true");
+    setTab(tab);
+    refreshThreadDelete();
+  }
+
+  function collapsePopover() {
+    popover.classList.remove("af-expanded");
+    popoverConfig.setAttribute("aria-expanded", "false");
+  }
+
+  function renderUiPanel(comment) {
+    const meta = comment.ui || {};
+    uiTag.textContent = meta.tag || comment.selector?.split(" > ").at(-1)?.replace(/:nth-of-type\(\d+\)/g, "") || "element";
+    uiSelected.textContent = comment.selector || "Selected item unavailable.";
+    uiColor.textContent = meta.color || "rgb(20, 20, 19)";
+    uiBg.textContent = meta.backgroundColor || "rgb(255, 255, 255)";
+    uiOpacity.textContent = meta.opacity || "1";
+    uiFont.textContent = meta.fontFamily || "system-ui";
+    uiSize.textContent = meta.fontSize || "14px";
+    uiWeight.textContent = meta.fontWeight || "400";
+    uiTextDot.style.setProperty("--af-dot", meta.color || "#141413");
+    uiBgDot.style.setProperty("--af-dot", meta.backgroundColor || "#fff");
+  }
+
+  function selectedText() {
+    const text = String(window.getSelection ? window.getSelection() : "").trim();
+    return text.length > 240 ? `${text.slice(0, 240)}...` : text;
+  }
+
+  function elementAtPoint(clientX, clientY) {
+    const feedbackNodes = [
+      layer,
+      hoverBox,
+      popover,
+      drawer,
+      root.querySelector("[data-af-toolbar]"),
+      launcher,
+      agentStatus
+    ].filter(Boolean);
+    const previous = feedbackNodes.map((node) => [node, node.style.pointerEvents]);
+    feedbackNodes.forEach((node) => { node.style.pointerEvents = "none"; });
+    const candidates = document.elementsFromPoint(clientX, clientY)
+      .filter((candidate) => !candidate.closest("[data-agent-feedback]"))
+      .filter((candidate) => !["HTML", "BODY"].includes(candidate.tagName))
+      .filter((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return (ar.width * ar.height) - (br.width * br.height);
+      });
+    previous.forEach(([node, value]) => { node.style.pointerEvents = value; });
+    return candidates[0] || document.elementFromPoint(clientX, clientY);
+  }
+
+  function rectForElement(element) {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left + window.scrollX,
+      y: rect.top + window.scrollY,
+      width: rect.width,
+      height: rect.height
+    };
+  }
+
+  function placeBox(box, rect) {
+    box.style.left = `${rect.x}px`;
+    box.style.top = `${rect.y}px`;
+    box.style.width = `${Math.max(rect.width, 8)}px`;
+    box.style.height = `${Math.max(rect.height, 8)}px`;
+  }
+
+  function placePopover(comment) {
+    const rect = comment.rect || {
+      x: comment.pageX,
+      y: comment.pageY,
+      width: 1,
+      height: 1
+    };
+    const margin = 10;
+    const width = Math.min(360, window.innerWidth - 28);
+    let left = rect.x + rect.width + margin;
+    if (left + width > window.scrollX + window.innerWidth - margin) {
+      left = Math.max(window.scrollX + margin, rect.x - width - margin);
+    }
+    let top = rect.y + Math.min(rect.height, 46);
+    top = Math.max(window.scrollY + margin, Math.min(top, window.scrollY + window.innerHeight - 220));
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+  }
+
+  function render() {
+    comments.forEach(normalizeThread);
+    comments = comments.filter((comment) => comment.messages.length > 0);
+    layer.style.width = `${Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)}px`;
+    layer.style.height = `${Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)}px`;
+    layer.querySelectorAll(".af-marker, .af-select-box").forEach((marker) => marker.remove());
+    if (visible) {
+      comments.forEach((comment, index) => {
+        if (comment.rect) {
+          const selectBox = document.createElement("div");
+          selectBox.className = "af-select-box";
+          placeBox(selectBox, comment.rect);
+          layer.append(selectBox);
+        }
+        const marker = document.createElement("button");
+        marker.type = "button";
+        marker.className = "af-marker";
+        marker.dataset.afMarker = "";
+        marker.textContent = String(index + 1);
+        marker.style.left = `${comment.markerX || comment.pageX}px`;
+        marker.style.top = `${comment.markerY || comment.pageY}px`;
+        marker.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openComment(comment.id);
+        });
+        layer.append(marker);
+      });
+    }
+
+    count.textContent = String(comments.length);
+    root.querySelector("[data-af-toolbar]")?.classList.toggle("af-hidden", !visible);
+    launcher.setAttribute("aria-pressed", String(visible));
+    list.innerHTML = comments.length ? "" : "<div class=\"af-card\"><p>No comments yet.</p></div>";
+    comments.forEach((comment, index) => {
+      const card = document.createElement("article");
+      card.className = "af-card";
+      card.innerHTML = `
+        <div class="af-card-head"><span>Comment ${index + 1}</span><span>${comment.status || "draft"}</span></div>
+        <p></p>
+        <small></small>
+      `;
+      const messageCount = normalizeThread(comment).messages.length;
+      card.querySelector(".af-card-head span:first-child").textContent = `Marker ${index + 1}`;
+      card.querySelector("p").textContent = comment.text || `${messageCount} message(s)`;
+      card.querySelector("small").textContent = comment.selector || `${Math.round(comment.viewportX)}, ${Math.round(comment.viewportY)}`;
+      card.addEventListener("click", () => openComment(comment.id));
+      list.append(card);
+    });
+  }
+
+  function openComment(id) {
+    activeId = id;
+    const comment = activeThread();
+    if (!comment) return;
+    normalizeThread(comment);
+    popoverInput.value = "";
+    renderThread(comment);
+    renderUiPanel(comment);
+    placePopover(comment);
+    popover.classList.add("af-open");
+    collapsePopover();
+    popoverInput.focus();
+  }
+
+  function closePopover() {
+    if (pendingComment && activeId === pendingComment.id) {
+      pendingComment = null;
+      activeId = null;
+    }
+    popover.classList.remove("af-open");
+    collapsePopover();
+  }
+
+  function refreshThreadDelete() {
+    const thread = activeThread();
+    threadDelete.classList.toggle("af-show", !!thread && normalizeThread(thread).messages.length > 0 && !pendingComment);
+  }
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add("af-show");
+    window.setTimeout(() => toast.classList.remove("af-show"), 1800);
+  }
+
+  function openInbox() {
+    if (activeId) {
+      openComment(activeId);
+      return;
+    }
+    const lastThread = comments.at(-1);
+    if (lastThread) {
+      openComment(lastThread.id);
+      return;
+    }
+    showToast("Select an item first");
+  }
+
+  function setAgentStatus(item) {
+    if (!item) {
+      agentStatus.classList.remove("af-show");
+      return;
+    }
+    const message = item.agentMessage || `${item.payload?.comments?.length || 0} comment(s) ${item.status}`;
+    const text = `Agent feedback ${item.status}: ${message}`;
+    agentStatus.innerHTML = `<strong>Agent · ${item.status}</strong><span></span>`;
+    agentStatus.querySelector("span").textContent = message;
+    agentStatus.classList.add("af-show");
+    if (lastStatusText && lastStatusText !== text) showToast(text);
+    lastStatusText = text;
+  }
+
+  function setArmed(next) {
+    armed = next;
+    toggle.setAttribute("aria-pressed", String(armed));
+    layer.classList.toggle("af-armed", armed);
+    layer.setAttribute("aria-hidden", String(!armed));
+    if (!armed) {
+      hoverBox.style.display = "none";
+      hoverTarget = null;
+    }
+  }
+
+  toggle.addEventListener("click", () => setArmed(!armed));
+  count.addEventListener("click", openInbox);
+  agentStatus.addEventListener("click", openInbox);
+  launcher.addEventListener("click", () => {
+    visible = !visible;
+    if (visible) {
+      localStorage.setItem(`${storageKey}:enabled`, "true");
+      drawer.classList.remove("af-minimized");
+    } else {
+      localStorage.removeItem(`${storageKey}:enabled`);
+      setArmed(false);
+      drawer.classList.add("af-minimized");
+      closePopover();
+    }
+    render();
+  });
+  menu.addEventListener("click", openInbox);
+  close.addEventListener("click", () => drawer.classList.remove("af-open"));
+  popoverClose.addEventListener("click", closePopover);
+  popoverConfig.addEventListener("click", () => {
+    if (popover.classList.contains("af-expanded")) {
+      collapsePopover();
+      return;
+    }
+    expandPopover("ui");
+  });
+  popoverTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      expandPopover(tab.dataset.afTab);
+    });
+  });
+  threadDelete.addEventListener("click", () => {
+    if (activeId) deleteThread(activeId);
+  });
+  popoverInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      popoverSave.click();
+    }
+  });
+
+  layer.addEventListener("mousemove", (event) => {
+    if (!armed) return;
+    const element = elementAtPoint(event.clientX, event.clientY);
+    if (!element || element === hoverTarget) return;
+    hoverTarget = element;
+    const rect = rectForElement(element);
+    placeBox(hoverBox, rect);
+    hoverBox.style.display = "block";
+  });
+
+  layer.addEventListener("click", (event) => {
+    if (!armed || event.target.classList.contains("af-marker")) return;
+    const element = elementAtPoint(event.clientX, event.clientY);
+    if (!element) return;
+    const rect = rectForElement(element);
+    const comment = {
+      id: makeId(),
+      text: "",
+      status: "draft",
+      messages: [],
+      pageX: event.pageX,
+      pageY: event.pageY,
+      markerX: rect.x + rect.width,
+      markerY: rect.y + Math.min(rect.height, 88),
+      viewportX: event.clientX,
+      viewportY: event.clientY,
+      rect,
+      selector: cssPath(element),
+      ui: uiSnapshot(element),
+      selectedText: selectedText(),
+      url: location.href,
+      title: document.title,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      createdAt: new Date().toISOString()
+    };
+    pendingComment = comment;
+    activeId = comment.id;
+    render();
+    openComment(comment.id);
+  });
+
+  save.addEventListener("click", () => {
+    const comment = comments.find((item) => item.id === activeId);
+    if (!comment) return;
+    comment.text = input.value.trim();
+    comment.updatedAt = new Date().toISOString();
+    persist();
+    render();
+    showToast("Comment saved");
+  });
+
+  popoverSave.addEventListener("click", async () => {
+    const comment = activeThread();
+    if (!comment) return;
+    const text = popoverInput.value.trim();
+    if (!text) {
+      showToast("Write a message first");
+      return;
+    }
+    normalizeThread(comment).messages.push({
+      id: makeId(),
+      role: "user",
+      text,
+      status: "draft",
+      createdAt: new Date().toISOString()
+    });
+    comment.text = text;
+    comment.updatedAt = new Date().toISOString();
+    commitPending(comment);
+    persist();
+    render();
+    popoverInput.value = "";
+    renderThread(comment);
+    const sent = await sendThreads([comment]);
+    if (sent) {
+      closePopover();
+      setArmed(false);
+    }
+  });
+
+  clear.addEventListener("click", clearAllThreads);
+
+  function ensureThreadFromServerItem(item) {
+    const marker = item?.marker || item?.payload?.comments?.[0];
+    const markerId = item?.markerId || marker?.markerId || marker?.id;
+    if (!marker || !markerId) return null;
+    let thread = comments.find((entry) => {
+      normalizeThread(entry);
+      return entry.id === markerId
+        || entry.markerId === markerId
+        || entry.messages.some((message) => message.batchId === item.id);
+    });
+    if (thread) return thread;
+
+    thread = {
+      ...marker,
+      id: markerId,
+      markerId,
+      text: marker.text || item.latestUserMessage || item.visibleText || "",
+      status: item.status || marker.status || "queued",
+      messages: Array.isArray(marker.messages) ? marker.messages.map((message) => ({
+        ...message,
+        status: message.status === "draft" ? (item.status || "queued") : (message.status || item.status || "queued"),
+        batchId: message.batchId || item.id
+      })) : []
+    };
+    normalizeThread(thread);
+    comments.push(thread);
+    return thread;
+  }
+
+  async function pollStatus() {
+    try {
+      const response = await fetch(`/api/feedback/status?artifact=${encodeURIComponent(artifactPath)}`);
+      if (!response.ok) return;
+      const result = await response.json();
+      if (result.latest) {
+        const message = result.latest.agentMessage ? ` — ${result.latest.agentMessage}` : "";
+        status.textContent = `Latest batch ${result.latest.id}: ${result.latest.status}${message}`;
+        for (const item of result.items || [result.latest]) {
+          ensureThreadFromServerItem(item);
+          if (!item || !["done", "canceled"].includes(item.status)) continue;
+          comments.forEach((thread) => {
+            normalizeThread(thread);
+            const relatedMessages = thread.messages.filter((message) => message.batchId === item.id);
+            if (!relatedMessages.length) return;
+            relatedMessages.forEach((message) => {
+              message.status = item.status === "done" ? "done" : "canceled";
+            });
+            if (item.agentMessage && !thread.messages.some((message) => message.role === "agent" && message.batchId === item.id)) {
+              thread.messages.push({
+                id: makeId(),
+                role: "agent",
+                text: item.agentMessage,
+                status: item.status,
+                batchId: item.id,
+                createdAt: item.updatedAt || new Date().toISOString()
+              });
+            }
+            thread.status = item.status;
+          });
+        }
+        if (result.latest.agentMessage) {
+          comments.forEach((thread) => {
+            normalizeThread(thread);
+            const hasBatch = thread.batchId === result.latest.id
+              || thread.messages.some((item) => item.batchId === result.latest.id);
+            const alreadyAdded = thread.messages.some((item) => item.role === "agent" && item.batchId === result.latest.id);
+            if (hasBatch && !alreadyAdded) {
+              thread.messages.push({
+                id: makeId(),
+                role: "agent",
+                text: result.latest.agentMessage,
+                status: result.latest.status,
+                batchId: result.latest.id,
+                createdAt: result.latest.updatedAt || new Date().toISOString()
+              });
+              thread.status = result.latest.status;
+            }
+          });
+          persist();
+          render();
+          const active = comments.find((item) => item.id === activeId);
+          if (active) renderThread(active);
+        } else {
+          persist();
+          render();
+        }
+        setAgentStatus(result.latest);
+      }
+    } catch {
+      return;
+    }
+  }
+
+  render();
+  pollStatus();
+  window.addEventListener("resize", render);
+  window.addEventListener("keydown", (event) => {
+    if (event.altKey && event.shiftKey && event.key.toLowerCase() === "a") {
+      visible = true;
+      localStorage.setItem(`${storageKey}:enabled`, "true");
+      drawer.classList.remove("af-minimized");
+      render();
+      showToast("Agent feedback controls shown");
+    }
+  });
+  window.setInterval(pollStatus, 5000);
+})();
+</script>
+<!-- AGENT_FEEDBACK_WIDGET_END -->

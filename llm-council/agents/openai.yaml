@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Council"
+  short_description: "Pressure-test decisions with 5 AI advisors"
+  default_prompt: "Use $llm-council to pressure-test this decision from five competing angles."

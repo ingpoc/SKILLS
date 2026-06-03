@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Harness Audit"
+  short_description: "Score agent harnesses with reports"
+  default_prompt: "Use $agentharness-audit to audit this agent harness and write the report."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Context Router"
+  short_description: "Route global vs project updates consistently"
+  default_prompt: "Use this skill to decide where changes should live: global Codex baseline or project-specific files."
