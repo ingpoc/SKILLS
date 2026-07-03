@@ -9,6 +9,7 @@ allowed-tools: Bash
 > **Self-validate after edits.** Any change to this skill's files must be followed by `./scripts/validate.sh`.
 
 Find what is still missing before agents keep polishing the same known screens.
+When the operator asks for full coverage, this is an exhaustive runtime interaction audit, not a representative smoke test.
 
 ## Modes
 
@@ -38,22 +39,30 @@ For Like-minded-style repos, also run the repo entrypoint if present:
 
 1. Build an expected surface map from `GOAL.md`, `DESIGN.md`, product docs, mockups, existing controls, and user request.
 2. Build an implemented surface map from app views, navigation, API clients, backend routes, seed data, and validation scripts.
-3. Runtime-test representative critical paths when tools are available:
-   - open tabs/screens
-   - tap visible buttons/cards
-   - type into fields
-   - open sheets/details
-   - verify backend-backed state changes where possible
-4. Classify every gap:
+3. Build a control ledger for every discovered screen:
+   - screen/tab/sheet/detail route
+   - every visible button, row, card, toggle, menu, text field, picker, and gesture-like affordance
+   - expected result, backend/API/data expectation, seed-data dependency, validation evidence needed
+4. Runtime-test every ledger item when tools are available:
+   - open every tab/screen/sheet/detail reachable from visible navigation
+   - tap every visible button, card, row, toggle, menu item, and custom control
+   - type into every editable field with valid and one invalid/minimal input where relevant
+   - verify that state-changing controls persist through the backend/store/DB or classify them as unwired
+   - compare each observed result with explicit pass/fail criteria
+   - mark untestable controls as `untested` with the exact blocker; do not treat them as passed
+5. Classify every gap:
    - missing screen
    - missing mockup/reference
    - present but static/fake
    - present but broken at runtime
+   - visible control untested
    - missing backend wiring
    - missing seed data
    - missing validation
    - missing `PROGRESS.md` requirement
-5. Compare gaps against `PROGRESS.md`. If a required item is not tracked, propose the smallest phase/location and success criteria.
+6. Compare gaps against `PROGRESS.md`. If a required item is not tracked, propose the smallest phase/location and success criteria.
+
+The scan is incomplete until each ledger item is `pass`, `fail`, or `untested-with-blocker`. For "fully production grade" requests, fail closed: any untested visible control is itself a finding and must be added to the proposed roadmap unless a narrower user-approved scope excludes it.
 
 Use exactly one `explorer` or project subagent per disjoint scan slice when useful:
 - native surface/runtime interactions
@@ -108,12 +117,20 @@ Scan mode output:
 ```text
 findings:
 - severity: high|medium|low
-  type: missing screen|missing mockup|dead control|backend gap|seed gap|validation gap|progress gap
+  type: missing screen|missing mockup|dead control|backend gap|seed gap|validation gap|progress gap|untested control
   evidence: file/path/screen/runtime observation
   requirement: one sentence
   progress_target: phase/section
   mockup_target: path or none
   success_criteria: one sentence
+
+coverage:
+- platform/surface: name
+  screens_checked: count/list
+  controls_checked: count
+  passed: count
+  failed: count
+  untested: count with blockers
 
 approval_needed:
 - PROGRESS.md additions: yes/no
@@ -137,6 +154,7 @@ Apply mode closeout:
 4. Static build success is insufficient for buttons, fields, sheets, custom cards, and backend state.
 5. Keep one roadmap owner: update `PROGRESS.md`; do not create a competing backlog doc.
 6. Stop at the smallest useful diff in apply mode.
+7. A full audit cannot close as complete while any discovered visible control lacks pass/fail/untested-with-blocker status.
 
 ## References
 
