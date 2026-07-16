@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from session_workspace import canonical_paths, ensure_workspace
+from validate_goal import validate as validate_goal
 
 
 SCHEMA_VERSION = 1
 ACTIVE = {"active", "handoff_pending"}
+SKILLS_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 METRIC_NAMES = {
     "handoffs_prepared",
     "successors_created",
@@ -36,17 +38,19 @@ def now() -> str:
 def project_root() -> Path:
     override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
     if override:
-        return Path(override).expanduser().resolve()
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip()).resolve()
-    return Path.cwd().resolve()
+        root = Path(override).expanduser().resolve()
+    else:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        root = Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else Path.cwd().resolve()
+    if root == SKILLS_REPOSITORY_ROOT:
+        raise ValueError("refusing to mutate orchestration state in the global skills repository")
+    return root
 
 
 def paths() -> tuple[Path, Path]:
@@ -140,7 +144,14 @@ def set_goal(args: argparse.Namespace) -> int:
     with locked() as (path, state):
         if not state or state.get("status") != "active":
             return fail("set-goal requires an active chain")
+        handoff = state.get("handoff") or {}
+        if handoff.get("claimed_at"):
+            expected = handoff.get("next_goal_hash") or state.get("goal_hash")
+            if expected and digest != expected:
+                return fail("claimed handoff goal hash mismatch")
         state["goal_hash"] = digest
+        if handoff.get("claimed_at"):
+            state["handoff"] = None
         state["updated_at"] = now()
         atomic_write(path, state)
         return emit({"chain_id": state["chain_id"], "goal_hash": digest, "hop": state["hop"]})
@@ -167,14 +178,31 @@ def prepare_handoff(args: argparse.Namespace) -> int:
             state["updated_at"] = now()
             atomic_write(path, state)
             return emit({"chain_id": state["chain_id"], "spawn_allowed": False, "reason": "max_hops_reached"})
+        if not args.first_command:
+            return fail("handoff requires --first-command")
+
+        next_objective = None
+        next_digest = None
+        if args.kind == "next-goal":
+            if not args.next_objective_file:
+                return fail("next-goal handoff requires --next-objective-file")
+            next_objective = args.next_objective_file.read_text(encoding="utf-8")
+            errors = validate_goal(next_objective)
+            if errors:
+                return fail("next goal failed admission: " + "; ".join(errors))
+            next_digest = "sha256:" + hashlib.sha256(next_objective.encode("utf-8")).hexdigest()
 
         handoff = {
             "kind": args.kind,
             "nonce": args.nonce or str(uuid.uuid4()),
             "pending_hop": int(state["hop"]) + 1,
             "successor_thread_id": None,
+            "first_command": args.first_command,
             "prepared_at": now(),
         }
+        if next_objective is not None:
+            handoff["next_goal_objective"] = next_objective
+            handoff["next_goal_hash"] = next_digest
         state["status"] = "handoff_pending"
         state["handoff"] = handoff
         metrics = state.setdefault("metrics", {})
@@ -206,26 +234,53 @@ def record_successor(args: argparse.Namespace) -> int:
 
 def claim(args: argparse.Namespace) -> int:
     with locked() as (path, state):
-        if not state or state.get("status") != "handoff_pending":
+        if not state:
+            return fail("no pending handoff to claim")
+        existing = state.get("handoff") or {}
+        if state.get("status") == "active" and existing.get("claimed_at"):
+            if existing.get("nonce") != args.nonce:
+                return fail("handoff nonce mismatch")
+            return emit({
+                "chain_id": state["chain_id"],
+                "hop": state["hop"],
+                "kind": existing["kind"],
+                "status": "active",
+                "recovered": True,
+                "goal_hash": state.get("goal_hash"),
+                "next_goal_objective": existing.get("next_goal_objective"),
+                "first_command": existing.get("first_command"),
+            })
+        if state.get("status") != "handoff_pending":
             return fail("no pending handoff to claim")
         handoff = state.get("handoff") or {}
         if handoff.get("nonce") != args.nonce:
             return fail("handoff nonce mismatch")
         if not handoff.get("successor_thread_id"):
             return fail("parent has not recorded the successor thread")
-        state["history"].append({
+        history_handoff = {key: value for key, value in handoff.items() if key != "next_goal_objective"}
+        state.setdefault("history", []).append({
             "hop": state["hop"],
             "goal_hash": state.get("goal_hash"),
-            "handoff": handoff,
+            "handoff": history_handoff,
             "closed_at": now(),
         })
         state["hop"] = handoff["pending_hop"]
         state["status"] = "active"
-        state["handoff"] = None
-        state["goal_hash"] = None if handoff["kind"] == "next-goal" else state.get("goal_hash")
+        handoff["claimed_at"] = now()
+        state["handoff"] = handoff
+        state["goal_hash"] = handoff.get("next_goal_hash") if handoff["kind"] == "next-goal" else state.get("goal_hash")
         state["updated_at"] = now()
         atomic_write(path, state)
-        return emit({"chain_id": state["chain_id"], "hop": state["hop"], "kind": handoff["kind"], "status": "active"})
+        return emit({
+            "chain_id": state["chain_id"],
+            "hop": state["hop"],
+            "kind": handoff["kind"],
+            "status": "active",
+            "recovered": False,
+            "goal_hash": state.get("goal_hash"),
+            "next_goal_objective": handoff.get("next_goal_objective"),
+            "first_command": handoff.get("first_command"),
+        })
 
 
 def stop(args: argparse.Namespace) -> int:
@@ -270,6 +325,8 @@ def parser() -> argparse.ArgumentParser:
     command = commands.add_parser("prepare-handoff")
     command.add_argument("--kind", choices=("next-goal", "continue-goal"), required=True)
     command.add_argument("--nonce")
+    command.add_argument("--next-objective-file", type=Path)
+    command.add_argument("--first-command")
     command.set_defaults(handler=prepare_handoff)
 
     command = commands.add_parser("record-successor")

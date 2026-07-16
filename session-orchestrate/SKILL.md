@@ -1,6 +1,6 @@
 ---
 name: session-orchestrate
-description: "Orchestrate product-plan completion across bounded Codex tasks. Use when the operator invokes $session-orchestrate, asks to continue eligible saved work, derive implementation goals from a roadmap, coordinate work across sessions, or avoid repeated compaction. A bare invocation rebuilds current product and implementation state; it resumes saved work only when resume-session proves the checkpoint fresh and consistent and the current owner plan still permits it."
+description: "Orchestrate product-plan completion across substantive Codex tasks. Use when the operator invokes $session-orchestrate, asks to continue eligible saved work, derive implementation goals from a roadmap, coordinate work across sessions, or avoid repeated compaction. A bare invocation reuses a fresh source-fingerprinted program map, rebuilding only when stale; it resumes saved work only when resume-session proves the checkpoint fresh and consistent and the current owner plan still permits it."
 allowed-tools: Read Bash Grep Glob get_goal create_goal update_goal update_plan spawn_agent codex_app__list_projects codex_app__create_thread
 ---
 
@@ -16,14 +16,14 @@ This skill reads the repository's product-plan owner, assesses implementation ag
 |---|---|
 | Primary archetype | product-program orchestration with deterministic transaction helpers |
 | Operator trigger | explicit `$session-orchestrate` invocation or explicit successor-task request |
-| Success evidence | owner-backed remaining-goal map, verified session goal, exact goal round-trip, one successor, no duplicate spawn, and a mechanical stop reason |
+| Success evidence | owner-backed remaining-goal map, admitted acceptance gap, durable product/evidence delta, exact goal round-trip, at most one successor, and a mechanical stop reason |
 | Persistent state | project `.session/`: generated `PLAN.md`, canonical `TRACKING.json`, tactical `CURRENT.md`, and mechanical `ORCHESTRATION.json` |
 | Default bound | remaining goals in the current authorized phase, capped at 12 task hops |
 | Judgment surface | mapping plan gates to implementation evidence, ordering remaining goals, and deciding whether proof is sufficient |
 
 ## Main flow
 
-Run `python3 scripts/entry.py` before broad retrieval. It creates or validates `.session/`, performs one-way legacy migration from `.claude/session-data/` when needed, delegates checkpoint eligibility to `resume-session`, checks plan-source freshness and chain consistency, and returns a cheap owner/plan/status inventory plus `exploration.action`. Read [references/workflow.md](references/workflow.md), use deterministic owner reads first, invoke the configured read-only `cost_scan` sidecar only when the returned trigger still has clear ROI, rebuild the program map when `workspace.program_action` says so, and follow the returned mode.
+Resolve the product root first, then run `python3 ~/.codex/skills/session-orchestrate/scripts/entry.py --root "$(git rev-parse --show-toplevel)"` before broad retrieval. The helper refuses the global skills repository, creates or validates the product's `.session/`, performs one-way legacy migration from `.claude/session-data/` when needed, delegates checkpoint eligibility to `resume-session`, checks plan-source freshness and chain consistency, and returns a cheap owner/plan/status inventory plus `exploration.action`. Read [references/workflow.md](references/workflow.md), use deterministic owner reads first, invoke the configured read-only `cost_scan` sidecar only when the returned trigger still has clear ROI, rebuild only when `workspace.program_action` says so, and follow the returned mode.
 
 Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition, [scripts/validate_goal.py](scripts/validate_goal.py) before `create_goal`, and [scripts/checkpoint.py](scripts/checkpoint.py) for exact-goal closeout.
 
@@ -32,7 +32,11 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 | Failure | Control |
 |---|---|
 | A broad phase objective causes repeated compaction | Split at one plan deliverable plus its narrow integration seam and verification gate. |
+| A tiny goal spends a task proving work already done | Probe the current acceptance gap before goal creation. Reconcile proven items inline, select the next real gap in the same task, and create no hop for reconciliation-only work. |
 | Two tasks create the same successor | `prepare-handoff` issues one nonce and refuses another spawn while pending. |
+| A successor repeats product-plan discovery | Prepare and validate its exact next objective and first command before spawning; reuse the fresh source-fingerprinted map. |
+| Claim succeeds but the successor is interrupted before `create_goal` | The claimed handoff retains the exact objective and first command until `set-goal` settles it; reclaiming the nonce is idempotent. |
+| The helper is invoked from `~/.codex/skills` | Refuse the root before creating `.session`; rerun with the product repository root. |
 | A completed goal is recreated | Save completed goals as `reference-only`; only unfinished handoffs use `ensure-active`. |
 | A chain crosses an authority or phase gate | Stop and record the requirement instead of creating a successor. |
 | A fresh task contains an old `CURRENT.md` | `entry.py` returns `review-checkpoint`; never auto-create its saved goal. |
@@ -46,8 +50,8 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 
 ## Hard rules
 
-1. **Rebuild current state.** Read the product-plan owner and implementation evidence on every invocation. Resume saved work only when it is mechanically eligible and still permitted by the current plan.
-2. **One task, one goal.** Keep the exact objective stable until completion, a real blocker, or an unfinished handoff.
+1. **Refresh only when stale.** Always run entry and honor source fingerprints. Reuse a fresh program map; read the changed owner slice and rebuild only when stale or missing.
+2. **One task, one substantive goal.** A new goal must close a currently failing acceptance gap and produce both an implementation/runtime delta and retained evidence. Keep its exact objective stable until completion, a real blocker, or an unfinished handoff.
 3. **Two planning levels.** `.session/TRACKING.json` names all ordered remaining goals; `create_goal` receives only the selected session goal and its concrete actions.
 4. **Deterministic bounds win.** Never exceed `max_hops`, bypass a pending nonce, or replace a mechanical failure with model judgment.
 5. **Authority gates stop the chain.** Spend, deployment, external sends, destructive operations, secrets, authentication, and new product phases require their normal authority.
@@ -55,6 +59,7 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 7. **Bounded discovery.** Read the declared route first, then minimal plan/status slices and live proof. Session history is off by default; a justified `cost_scan` may inspect at most three relevant sessions.
 8. **One owner per fact.** Product plan owns intended completion; `.session/TRACKING.json` owns derived cross-session progress; generated `PLAN.md` is read-only; `CURRENT.md` owns tactical handoff; `ORCHESTRATION.json` owns chain mechanics.
 9. **History is not truth.** Git history, past sessions, file presence, and prior skills may route investigation but cannot prove completion or grant authority.
+10. **Reconciliation is not a goal.** If a bounded preflight proves the candidate already complete, record the evidence and select again inline. Never initialize a chain, consume a hop, or spawn a successor solely for reconciliation.
 
 ## Cross-references
 

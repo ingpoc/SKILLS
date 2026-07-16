@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from session_workspace import ensure_workspace
 
 
 HERE = Path(__file__).resolve().parent
+SKILLS_REPOSITORY_ROOT = HERE.parents[1]
 INSPECTOR = HERE.parent.parent / "resume-session" / "scripts" / "inspect_checkpoint.py"
 INVENTORY = HERE / "project_inventory.py"
 EXPLORATION_CONFLICT_REASONS = {
@@ -23,20 +25,25 @@ EXPLORATION_CONFLICT_REASONS = {
 }
 
 
-def project_root() -> Path:
-    override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip()).resolve()
-    return Path.cwd().resolve()
+def project_root(explicit: Path | None = None) -> Path:
+    if explicit:
+        root = explicit.expanduser().resolve()
+    else:
+        override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
+        if override:
+            root = Path(override).expanduser().resolve()
+        else:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            root = Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else Path.cwd().resolve()
+    if root == SKILLS_REPOSITORY_ROOT:
+        raise ValueError("refusing to orchestrate the global skills repository; run from the product repository or pass --root")
+    return root
 
 
 def checkpoint_inspection(root: Path) -> dict[str, Any]:
@@ -81,10 +88,13 @@ def chain_action(state: dict[str, Any] | None, mode: str) -> str:
         return "review-current-owner"
     if not state:
         return "init-new-chain"
+    handoff = state.get("handoff") or {}
+    if state.get("status") == "active" and handoff.get("claimed_at"):
+        return "recover-claimed-handoff"
     status = state.get("status")
     if mode == "resume-exact-goal":
         if status == "active":
-            return "reuse-active-chain"
+            return "reuse-active-chain" if state.get("goal_hash") else "recover-unset-goal"
         if status == "handoff_pending":
             return "claim-pending-handoff"
         return "resume-goal-chain-closed"
@@ -140,8 +150,11 @@ def exploration_route(workspace: dict[str, Any], inspection: dict[str, Any]) -> 
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Resolve session-orchestrate entry state")
+    parser.add_argument("--root", type=Path)
+    args = parser.parse_args()
     try:
-        root = project_root()
+        root = project_root(args.root)
         workspace = ensure_workspace(root)
         inspection = checkpoint_inspection(root)
         state_path = Path(workspace["paths"]["orchestration"])
@@ -157,7 +170,12 @@ def main() -> int:
             downgrade(inspection, "chain_completed")
         elif recorded_hash and recorded_hash != inspection.get("goal_hash"):
             downgrade(inspection, "chain_goal_hash_mismatch")
-        elif state.get("status") in {"active", "handoff_pending", "stopped", "blocked"} and not recorded_hash:
+        elif state.get("status") == "active" and not recorded_hash:
+            inspection["reasons"] = list(dict.fromkeys([
+                *(inspection.get("reasons") or []),
+                "chain_goal_hash_unset_recoverable",
+            ]))
+        elif state.get("status") in {"handoff_pending", "stopped", "blocked"} and not recorded_hash:
             downgrade(inspection, "chain_goal_hash_missing")
 
     if inspection.get("mode") == "resume-exact-goal":
@@ -188,6 +206,12 @@ def main() -> int:
             "phase_boundary": state.get("phase_boundary"),
             "stop_reason": state.get("stop_reason"),
             "goal_hash": state.get("goal_hash"),
+            "recovery": None if not (state.get("handoff") or {}).get("claimed_at") else {
+                "kind": state["handoff"].get("kind"),
+                "nonce": state["handoff"].get("nonce"),
+                "next_goal_objective": state["handoff"].get("next_goal_objective"),
+                "first_command": state["handoff"].get("first_command"),
+            },
         },
     }
     print(json.dumps(output, indent=2, sort_keys=True))

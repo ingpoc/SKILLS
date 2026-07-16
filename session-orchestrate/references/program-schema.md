@@ -18,7 +18,7 @@ The folder is private local agent state and is added to `.git/info/exclude`. Pro
 Run before any other orchestration command:
 
 ```bash
-python3 scripts/session_workspace.py ensure --root "$(git rev-parse --show-toplevel)"
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" ensure --root "$SESSION_ORCHESTRATE_ROOT"
 ```
 
 When `.session/` does not exist, `ensure` creates it with mode `0700`. Existing legacy `.claude/session-data/CURRENT.md` and `ORCHESTRATION.json` are copied byte-for-byte only when the canonical targets are absent. Legacy files are retained but never consulted after `.session/` exists.
@@ -54,15 +54,15 @@ Goal ids are unique kebab-case. Actions and verification cannot be empty. A comp
 Synchronize and render atomically:
 
 ```bash
-python3 scripts/session_workspace.py sync \
-  --root "$(git rev-parse --show-toplevel)" \
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync \
+  --root "$SESSION_ORCHESTRATE_ROOT" \
   --program-file /tmp/session-program.json
 ```
 
 `sync` fingerprints every declared plan source. `status` returns `program_action: rebuild-plan` when a source changes, disappears, the generated projection is edited, or the next goal needs selection:
 
 ```bash
-python3 scripts/session_workspace.py status --root "$(git rev-parse --show-toplevel)"
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" status --root "$SESSION_ORCHESTRATE_ROOT"
 ```
 
 ## Goal tracking
@@ -70,8 +70,8 @@ python3 scripts/session_workspace.py status --root "$(git rev-parse --show-tople
 Mark the selected goal active:
 
 ```bash
-python3 scripts/session_workspace.py mark \
-  --root "$(git rev-parse --show-toplevel)" \
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark \
+  --root "$SESSION_ORCHESTRATE_ROOT" \
   --goal-id actions-proof \
   --status in_progress
 ```
@@ -79,8 +79,8 @@ python3 scripts/session_workspace.py mark \
 Record completion only with evidence:
 
 ```bash
-python3 scripts/session_workspace.py mark \
-  --root "$(git rev-parse --show-toplevel)" \
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark \
+  --root "$SESSION_ORCHESTRATE_ROOT" \
   --goal-id actions-proof \
   --status completed \
   --evidence "tests/phase5-proof.json"

@@ -7,11 +7,12 @@ import sys
 from pathlib import Path
 
 
-MIN_WORDS = 180
-MAX_WORDS = 450
+MAX_WORDS = 300
+LEGACY_MAX_WORDS = 450
 BASE_REQUIRED = ("Outcome", "Scope", "Constraints", "Verification", "Stop conditions")
-NEW_REQUIRED = ("Plan linkage", "Actions")
+NEW_REQUIRED = ("Plan linkage", "Acceptance gap", "Actions", "Expected durable delta")
 BASE_LIST_REQUIRED = ("Scope", "Verification", "Stop conditions")
+NEW_LIST_REQUIRED = ("Acceptance gap", "Actions", "Expected durable delta")
 
 
 def section(text: str, name: str) -> str:
@@ -23,21 +24,40 @@ def section(text: str, name: str) -> str:
 def validate(text: str, *, legacy_resume: bool = False) -> list[str]:
     errors: list[str] = []
     words = re.findall(r"\b[\w'-]+\b", text)
-    if len(words) < MIN_WORDS:
-        errors.append(f"goal is too short: {len(words)} words; minimum is {MIN_WORDS}")
-    if len(words) > MAX_WORDS:
-        errors.append(f"goal is too long: {len(words)} words; maximum is {MAX_WORDS}")
+    maximum = LEGACY_MAX_WORDS if legacy_resume else MAX_WORDS
+    if len(words) > maximum:
+        errors.append(f"goal is too long: {len(words)} words; maximum is {maximum}")
 
     required = BASE_REQUIRED if legacy_resume else (*BASE_REQUIRED, *NEW_REQUIRED)
     for name in required:
         if not section(text, name):
             errors.append(f"missing or empty section: ## {name}")
 
-    list_required = BASE_LIST_REQUIRED if legacy_resume else (*BASE_LIST_REQUIRED, "Actions")
+    list_required = BASE_LIST_REQUIRED if legacy_resume else (*BASE_LIST_REQUIRED, *NEW_LIST_REQUIRED)
     for name in list_required:
         body = section(text, name)
         if body and not re.search(r"(?m)^\s*(?:[-*]|\d+\.)\s+\S", body):
             errors.append(f"section requires at least one concrete list item: ## {name}")
+
+    if not legacy_resume:
+        gap = section(text, "Acceptance gap")
+        if gap and not re.search(r"(?mi)^\s*[-*]\s*current\s*:\s+\S", gap):
+            errors.append("acceptance gap requires a '- Current: ...' item")
+        if gap and not re.search(r"(?mi)^\s*[-*]\s*exit\s*:\s+\S", gap):
+            errors.append("acceptance gap requires an '- Exit: ...' item")
+
+        delta = section(text, "Expected durable delta")
+        delta_kinds = {
+            kind.lower()
+            for kind in re.findall(
+                r"(?mi)^\s*[-*]\s*(implementation|runtime|evidence)\s*:\s+\S",
+                delta,
+            )
+        }
+        if "evidence" not in delta_kinds:
+            errors.append("durable delta requires an '- Evidence: ...' item")
+        if not delta_kinds.intersection({"implementation", "runtime"}):
+            errors.append("durable delta requires an '- Implementation: ...' or '- Runtime: ...' item")
 
     return errors
 

@@ -26,10 +26,10 @@ Lower sources never override higher sources. A commit, file, stale checkpoint, o
 
 ## Entry lane
 
-1. Run `python3 scripts/entry.py` before broad retrieval. It ensures `.session/`, migrates legacy state when needed, and returns workspace freshness, checkpoint eligibility, chain consistency, a cheap owner/plan/status inventory, and a structured `exploration` recommendation. The cheap path does not mine session history, commit logs, or local skills.
+1. Resolve both roots once: `export SESSION_ORCHESTRATE_ROOT="$(git rev-parse --show-toplevel)" SESSION_ORCHESTRATE_SKILL="${CODEX_HOME:-$HOME/.codex}/skills/session-orchestrate"`. Then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/entry.py" --root "$SESSION_ORCHESTRATE_ROOT"` before broad retrieval. It refuses the global skills repository, ensures the product's `.session/`, migrates legacy state when needed, and returns workspace freshness, checkpoint eligibility, chain consistency, a cheap owner/plan/status inventory, and a structured `exploration` recommendation. The cheap path does not mine session history, commit logs, or local skills.
 2. Call `get_goal`. Preserve a matching unfinished goal. A different unfinished goal is a conflict; do not replace it.
 3. Read the narrowest routing owner from `project_inventory.owner_routing_candidates`. Follow its declared product-plan or roadmap route. Filename candidates are fallback discovery only.
-4. Read only the plan sections needed to identify the current phase, ordered deliverables, dependencies, and exit gate.
+4. When `workspace.program_action` is `use-plan`, reuse the selected goal and source fingerprints; do not rebuild or repeat broad discovery. Otherwise read only the plan sections needed to identify the current phase, ordered deliverables, dependencies, and exit gate.
 5. Read the implementation/status owner when one exists. Verify disputed or missing status against live repository or runtime evidence.
 6. Follow `workspace.program_action`: `rebuild-plan` requires a fresh sync before selecting new work; `use-plan` permits the current selected goal; `product-complete` requires exit-gate readback; `review-blocked-goal` stops at its recorded gate.
 7. Follow `exploration.action` below. The main agent owns the decision, validates every accepted finding against live files, and writes only normalized evidence into tracking.
@@ -71,7 +71,7 @@ Before selecting a goal, derive a compact map containing:
 4. **Remaining goals:** ordered session-sized outcomes with prerequisites and authority gates.
 5. **Selected goal:** the first unblocked goal whose prerequisites are satisfied.
 
-Each remaining goal must name:
+Each remaining goal must be large enough to justify a task: one product deliverable, its direct integration seam, and the proof needed to accept it. It must name:
 
 - one product-plan deliverable or narrow integration seam;
 - prerequisites;
@@ -79,30 +79,36 @@ Each remaining goal must name:
 - observable verification;
 - stop and authority boundaries.
 
+Do not split a deliverable into inventory, source inspection, test-writing, and readback goals. Those are actions inside one goal. A proof-only goal is valid when the unproven runtime or release gate is itself a substantive product-plan exit gate.
+
 Do not report a completion percentage from file counts, commit counts, test counts, or prose checkboxes. Report a percentage only when the owner plan defines a finite acceptance-gate denominator and every completed item has evidence.
 
-Encode the map with the schema in [program-schema.md](program-schema.md), then run `python3 scripts/session_workspace.py sync --root <root> --program-file <json>`. This atomically writes canonical `.session/TRACKING.json` and its generated `.session/PLAN.md` projection. Never edit `PLAN.md` directly. When an authoritative repository implementation-status owner exists, update it after verified progress as well; `.session` does not replace product-facing delivery records.
+Encode the map with the schema in [program-schema.md](program-schema.md), then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync --root "$SESSION_ORCHESTRATE_ROOT" --program-file <json>`. This atomically writes canonical `.session/TRACKING.json` and its generated `.session/PLAN.md` projection. Never edit `PLAN.md` directly. When an authoritative repository implementation-status owner exists, update it after verified progress as well; `.session` does not replace product-facing delivery records.
 
 ## Choose and start one session goal
 
-Write the selected objective to a private temporary Markdown file with:
+Before creating a goal, run an admission probe: at most five narrow owner or live-proof commands that answer whether the selected acceptance gap still fails. If current evidence already satisfies it, mark the program item completed with that evidence and select again in the same task. Reconciliation alone never initializes a chain, consumes a hop, or creates a successor. Stop only at product completion, an authority gate, or a real unresolved gap.
+
+Write the admitted objective to a private temporary Markdown file with:
 
 - `## Outcome`
 - `## Plan linkage`
+- `## Acceptance gap` with `- Current:` and `- Exit:` items
 - `## Scope`
 - `## Actions`
+- `## Expected durable delta` with an `- Implementation:` or `- Runtime:` item plus `- Evidence:`
 - `## Constraints`
 - `## Verification`
 - `## Stop conditions`
 
-The objective should be 180–450 words. `Actions`, `Verification`, and `Stop conditions` must contain concrete list items. For a legacy exact checkpoint, preserve its text exactly; do not rewrite it merely to adopt the newer template.
+The objective should be concise and no longer than 300 words; do not pad it to meet a minimum. `Acceptance gap`, `Actions`, `Expected durable delta`, `Verification`, and `Stop conditions` must contain concrete list items. The durable delta must name both the changed implementation/runtime surface and retained acceptance evidence. For a legacy exact checkpoint, preserve its text exactly; do not rewrite it merely to adopt the newer template.
 
-Run `python3 scripts/validate_goal.py <goal-file>`. For an eligible legacy checkpoint that must remain byte-for-byte exact, use `python3 scripts/validate_goal.py <goal-file> --legacy-resume`; never use that exception for a newly selected goal. After validation:
+Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file>`. For an eligible legacy checkpoint that must remain byte-for-byte exact, add `--legacy-resume`; never use that exception for a newly selected goal. After validation:
 
 1. Call `create_goal` with the exact Markdown objective, unless a matching unfinished goal already exists.
-2. Mark the selected program goal `in_progress` with `session_workspace.py mark`.
-3. Initialize the chain with a hop budget equal to the number of session goals in the current authorized phase, capped at 12: `python3 scripts/chain_state.py init --max-hops <count> --phase-boundary "<boundary>"`. A successor claims its pending nonce instead.
-4. Save the exact goal hash with `python3 scripts/chain_state.py set-goal --objective-file <goal-file>`.
+2. Mark the selected program goal `in_progress` with `"$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark`.
+3. Initialize the chain with a hop budget equal to the number of substantive session goals in the current authorized phase, capped at 12: `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" init --max-hops <count> --phase-boundary "<boundary>"`. A successor claims its pending nonce instead.
+4. Save the exact goal hash with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" set-goal --objective-file <goal-file>`.
 5. Load only the owner slice and skills needed for the first action. Past skill usage is a routing hint, not a requirement to reload every prior skill.
 6. Make the smallest concrete implementation or verification attempt in the next tool action.
 7. Continue until the stop conditions pass or a real blocker/authority boundary is reached.
@@ -115,17 +121,17 @@ Run `python3 scripts/validate_goal.py <goal-file>`. For an eligible legacy check
 2. Mark the program goal `completed` with one or more evidence references. The helper refuses evidence-free completion.
 3. Update the owning implementation/status surface if the repository declares one.
 4. Call `update_goal complete`.
-5. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy reference-only --next-action "<next program-map decision>" --verification "<proof summary>"`.
-6. Rebuild and sync the program map to select the next goal or prove completion. Stop when the product/phase exit gate is complete, the next work crosses an authority boundary, or the chain reached `max_hops`.
-7. Otherwise run `python3 scripts/chain_state.py prepare-handoff --kind next-goal`.
+5. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy reference-only --next-action "<next program-map decision>" --verification "<proof summary>"`.
+6. Refresh only the implementation evidence affected by the completed goal. Rebuild the map only when an owner-source fingerprint changed; otherwise mark and select in the existing map. Run the admission probe on the next candidate. Stop when it reconciles to product/phase completion, crosses an authority boundary, or the chain reached `max_hops`.
+7. Otherwise write and validate the exact next objective, then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind next-goal --next-objective-file <next-goal-file> --first-command "<exact first command>"`. Never spawn after reconciliation-only work.
 
 ### Unfinished handoff
 
 Use only after actual automatic compaction or when another task is required to finish the same authorized goal:
 
 1. Keep the active goal unfinished.
-2. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
-3. Run `python3 scripts/chain_state.py prepare-handoff --kind continue-goal`.
+2. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
+3. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind continue-goal --first-command "<exact first command>"`.
 
 ### Create one successor
 
@@ -135,9 +141,9 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 2. Create exactly one same-project successor task.
 3. Use this prompt:
 
-   `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate and claim nonce <nonce>. Rebuild the program map from current product-plan and implementation evidence. Preserve a still-eligible unfinished goal exactly; otherwise choose the next unblocked session goal. Create at most one successor and stop at authority or phase boundaries.`
+   `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate and claim nonce <nonce>. The handoff contains the exact admitted goal and first command; recover them mechanically and do not rebuild a fresh program map. Revalidate only if entry reports stale sources or a conflict. Create at most one successor and stop at authority or phase boundaries.`
 
-4. Record the task id with `python3 scripts/chain_state.py record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
+4. Record the task id with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
 5. End the current task. Do not continue implementation after spawning.
 
 ## Negative scenarios
@@ -145,6 +151,7 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | Scenario | Result |
 |---|---|
 | Fresh task, no checkpoint | Build the map from current owner state. |
+| Fresh program map and no resumable checkpoint | Reuse tracking, probe its selected gap, and avoid broad plan or session mining. |
 | `.session/` missing with legacy state present | Copy legacy checkpoint and chain once, retain legacy files, then use only `.session/`. |
 | Product-plan source changed after tracking sync | Return `rebuild-plan`; do not execute the stale selected goal. |
 | Generated `PLAN.md` was edited | Return `rebuild-plan`; regenerate it from canonical tracking. |
@@ -153,6 +160,10 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | Fresh checkpoint but product plan changed | Reconcile; use the normal new-goal lane if the exact goal is no longer current. |
 | Matching checkpoint but chain goal hash differs | Review conflict; do not create a goal. |
 | Completed chain or completed active goal | Select the next current goal; never reopen it. |
+| Selected goal already passes its admission probe | Reconcile it inline and select again; do not create a goal, chain, or successor for that item. |
+| Claimed handoff interrupted before goal creation | Reclaim the same nonce, recover the exact objective and first command, call `create_goal`, then settle with `set-goal`. Do not increment history twice. |
+| Legacy active chain has no goal hash but `CURRENT.md` has an eligible exact goal | Follow `recover-unset-goal`: create or preserve that exact goal, then settle the chain with `set-goal`; do not start another chain. |
+| Command resolves `~/.codex/skills` as project root | Refuse without writing state; rerun from or pass the actual product root. |
 | Different active goal | Stop for conflict resolution. |
 | Product plan exists but status is unclear | Verify live evidence and mark unknown, not complete. |
 | No product plan and no explicit product objective | Stop for product-owner direction. |
@@ -166,6 +177,6 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 
 Record a chain stop with:
 
-`python3 scripts/chain_state.py stop --status stopped --reason "<specific reason>"`
+`python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" stop --status stopped --reason "<specific reason>"`
 
 Use `completed` only when the authorized phase or product completion gate is proven. Use `blocked` only for a true impasse under the platform's repeated-blocker rule.

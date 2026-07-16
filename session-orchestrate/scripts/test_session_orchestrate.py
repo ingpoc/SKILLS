@@ -21,19 +21,27 @@ CHECKPOINT = HERE / "checkpoint.py"
 ENTRY = HERE / "entry.py"
 
 
-def goal(words: int = 220) -> str:
-    filler = " ".join(f"detail{i}" for i in range(words - 35))
+def goal(words: int = 150) -> str:
+    filler = " ".join(f"detail{i}" for i in range(max(0, words - 70)))
     return f"""## Outcome
 Deliver one bounded result with traceable evidence. {filler}
 
 ## Plan linkage
 This goal advances one current owner-plan deliverable and its acceptance gate.
 
+## Acceptance gap
+- Current: The deliverable lacks its owned implementation seam and accepted proof.
+- Exit: The seam works and the direct deterministic evidence passes.
+
 ## Scope
 - Implement one owned deliverable and its direct integration seam.
 
 ## Actions
 - Read the narrow owner slice, implement the deliverable, and run its direct proof.
+
+## Expected durable delta
+- Implementation: Update the owned implementation surface and integration seam.
+- Evidence: Retain deterministic proof that the acceptance gate passes.
 
 ## Constraints
 Preserve exact goal text and avoid external effects.
@@ -67,7 +75,7 @@ class SessionOrchestrateTests(unittest.TestCase):
             self.fail(result.stderr)
         return result
 
-    def write_goal(self, words: int = 220) -> Path:
+    def write_goal(self, words: int = 150) -> Path:
         path = self.root / "goal.md"
         path.write_text(goal(words), encoding="utf-8")
         return path
@@ -162,6 +170,12 @@ class SessionOrchestrateTests(unittest.TestCase):
         ).replace(
             "\n## Actions\n- Read the narrow owner slice, implement the deliverable, and run its direct proof.\n",
             "",
+        ).replace(
+            "\n## Acceptance gap\n- Current: The deliverable lacks its owned implementation seam and accepted proof.\n- Exit: The seam works and the direct deterministic evidence passes.\n",
+            "",
+        ).replace(
+            "\n## Expected durable delta\n- Implementation: Update the owned implementation surface and integration seam.\n- Evidence: Retain deterministic proof that the acceptance gate passes.\n",
+            "",
         )
         path = self.root / "legacy.md"
         path.write_text(legacy, encoding="utf-8")
@@ -199,6 +213,31 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["exploration"]["agent_type"], "cost_scan")
         self.assertIsNone(output["goal_file"])
 
+    def test_entry_refuses_global_skills_repository_as_project_root(self) -> None:
+        env = dict(os.environ)
+        env.pop("SESSION_ORCHESTRATE_ROOT", None)
+        skills_root = HERE.parents[1]
+        state_before = (skills_root / ".session").exists()
+        result = subprocess.run(
+            [sys.executable, str(ENTRY)],
+            cwd=skills_root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refusing to orchestrate the global skills repository", result.stderr)
+        self.assertEqual((skills_root / ".session").exists(), state_before)
+        state_result = subprocess.run(
+            [sys.executable, str(STATE), "status"],
+            cwd=skills_root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(state_result.returncode, 1)
+        self.assertIn("refusing to mutate orchestration state", state_result.stderr)
+
     def test_fresh_checkpoint_is_not_activated_when_program_source_changed(self) -> None:
         self.write_checkpoint("ensure-active", goal())
         (self.root / "docs" / "PRODUCTPLAN.md").write_text("# Product plan\n\nChanged current owner.\n", encoding="utf-8")
@@ -216,6 +255,15 @@ class SessionOrchestrateTests(unittest.TestCase):
         output = json.loads(self.run_entry().stdout)
         self.assertEqual(output["chain_action"], "reuse-active-chain")
         self.assertEqual(output["chain"]["phase_boundary"], "Phase 5")
+
+    def test_entry_recovers_exact_checkpoint_when_active_chain_goal_was_never_set(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "resume-exact-goal")
+        self.assertEqual(output["chain_action"], "recover-unset-goal")
+        self.assertIn("chain_goal_hash_unset_recoverable", output["reasons"])
+        self.assertEqual(output["exploration"]["action"], "skip")
 
     def test_entry_resumes_goal_without_reopening_stopped_chain(self) -> None:
         self.write_checkpoint("ensure-active", goal())
@@ -283,16 +331,29 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["mode"], "choose-next-goal")
         self.assertEqual(output["chain_action"], "init-new-chain")
 
-    def test_goal_validator_rejects_short_goal(self) -> None:
-        result = subprocess.run([sys.executable, str(VALIDATE), str(self.write_goal(50))], text=True, capture_output=True)
+    def test_goal_validator_rejects_reconciliation_without_durable_delta(self) -> None:
+        path = self.write_goal()
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "- Implementation: Update the owned implementation surface and integration seam.\n- Evidence: Retain deterministic proof that the acceptance gate passes.",
+                "- Evidence: Inspect the already completed work.",
+            ),
+            encoding="utf-8",
+        )
+        result = subprocess.run([sys.executable, str(VALIDATE), str(path)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("too short", result.stderr)
+        self.assertIn("Implementation", result.stderr)
 
     def test_nonce_handoff_is_single_spawn_and_claimable(self) -> None:
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
         goal_path = self.write_goal()
         self.run_state("set-goal", "--objective-file", str(goal_path))
-        first = json.loads(self.run_state("prepare-handoff", "--kind", "next-goal", "--nonce", "n1").stdout)
+        next_goal = self.root / "next-goal.md"
+        next_goal.write_text(goal().replace("one bounded result", "the next bounded result"), encoding="utf-8")
+        first = json.loads(self.run_state(
+            "prepare-handoff", "--kind", "next-goal", "--nonce", "n1",
+            "--next-objective-file", str(next_goal), "--first-command", "run-next-proof",
+        ).stdout)
         self.assertTrue(first["spawn_allowed"])
         duplicate = json.loads(self.run_state("prepare-handoff", "--kind", "next-goal").stdout)
         self.assertFalse(duplicate["spawn_allowed"])
@@ -301,15 +362,50 @@ class SessionOrchestrateTests(unittest.TestCase):
         claimed = json.loads(self.run_state("claim", "--nonce", "n1").stdout)
         self.assertEqual(claimed["hop"], 2)
         self.assertEqual(claimed["kind"], "next-goal")
+        self.assertEqual(claimed["next_goal_objective"], next_goal.read_text(encoding="utf-8"))
+        self.assertEqual(claimed["first_command"], "run-next-proof")
         state = json.loads(self.run_state("status").stdout)
+        self.assertIsNotNone(state["handoff"])
+        self.assertEqual(state["goal_hash"], first["next_goal_hash"])
         self.assertEqual(state["metrics"]["handoffs_prepared"], 1)
         self.assertEqual(state["metrics"]["successors_created"], 1)
         self.assertEqual(state["metrics"]["duplicate_spawn_attempts"], 1)
 
+        recovered = json.loads(self.run_state("claim", "--nonce", "n1").stdout)
+        self.assertTrue(recovered["recovered"])
+        self.assertEqual(len(json.loads(self.run_state("status").stdout)["history"]), 1)
+        entry = json.loads(self.run_entry().stdout)
+        self.assertEqual(entry["chain_action"], "recover-claimed-handoff")
+        self.assertEqual(entry["chain"]["recovery"]["first_command"], "run-next-proof")
+
+        self.run_state("set-goal", "--objective-file", str(next_goal))
+        settled = json.loads(self.run_state("status").stdout)
+        self.assertIsNone(settled["handoff"])
+        self.assertNotIn("next_goal_objective", settled["history"][0]["handoff"])
+
+    def test_next_goal_handoff_requires_an_admitted_exact_goal(self) -> None:
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        self.run_state("set-goal", "--objective-file", str(self.write_goal()))
+        missing = self.run_state(
+            "prepare-handoff", "--kind", "next-goal", "--first-command", "run-next-proof", ok=False,
+        )
+        self.assertIn("requires --next-objective-file", missing.stderr)
+
+        tiny = self.root / "tiny-next.md"
+        tiny.write_text("## Outcome\nInspect existing work.\n", encoding="utf-8")
+        rejected = self.run_state(
+            "prepare-handoff", "--kind", "next-goal", "--next-objective-file", str(tiny),
+            "--first-command", "inspect", ok=False,
+        )
+        self.assertIn("failed admission", rejected.stderr)
+
     def test_wrong_nonce_cannot_claim(self) -> None:
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
         self.run_state("set-goal", "--objective-file", str(self.write_goal()))
-        self.run_state("prepare-handoff", "--kind", "continue-goal", "--nonce", "right")
+        self.run_state(
+            "prepare-handoff", "--kind", "continue-goal", "--nonce", "right",
+            "--first-command", "continue-proof",
+        )
         self.run_state("record-successor", "--nonce", "right", "--thread-id", "thread-1")
         result = self.run_state("claim", "--nonce", "wrong", ok=False)
         self.assertEqual(result.returncode, 1)
