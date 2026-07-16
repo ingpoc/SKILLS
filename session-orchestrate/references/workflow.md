@@ -1,0 +1,100 @@
+# Session orchestration workflow
+
+## Experiment hypothesis
+
+Bounded fresh tasks are useful only if they preserve exact intent while reducing repeated discovery and compaction. Keep this workflow when two or more real handoffs satisfy all of these checks:
+
+1. The successor restores the exact unfinished goal or intentionally selects the next goal after a completed one.
+2. The successor begins from the saved first command without broad repository rediscovery.
+3. Exactly one successor is created for each handoff.
+4. Phase, spend, deployment, authentication, external-send, and destructive-action gates stop correctly.
+5. Save, resume, and task-creation overhead is smaller than the avoided rediscovery and repeated compaction.
+
+Drop the workflow when handoffs repeatedly require operator repair, duplicate work, lose goal criteria, or add more ceremony than they save.
+
+## Entry lane
+
+### Preflight
+
+1. Confirm the operator explicitly authorized a multi-task chain. If not, use ordinary `save-session` and stop.
+2. Call `get_goal`. Preserve a matching unfinished goal; never replace a different unfinished goal.
+3. Run `resume-session` when `CURRENT.md` exists. Verify any saved first command against current repository evidence before executing it.
+4. Inspect the narrow owner section for delivery order. In BrandGPT, read the current `PRODUCTPLAN` phase section and its exit gate.
+5. Initialize or claim chain state:
+   - New chain: `python3 scripts/chain_state.py init --max-hops 3 --phase-boundary "<boundary>"`
+   - Successor: `python3 scripts/chain_state.py claim --nonce "<nonce>"`
+
+### Choose the goal
+
+Choose one goal that has meaningful implementation plus verification but does not contain an entire product phase. A good goal usually owns one deliverable, one narrow integration seam, and its directly relevant proof.
+
+Write the exact objective to a temporary Markdown file using these headings:
+
+- `## Outcome`
+- `## Scope`
+- `## Constraints`
+- `## Verification`
+- `## Stop conditions`
+
+Run `python3 scripts/validate_goal.py <goal-file>`. The deterministic envelope is 180–450 words with at least one concrete list item in Scope, Verification, and Stop conditions. If it fails, split or tighten the goal; do not loosen the validator to admit a phase-sized objective.
+
+After validation:
+
+1. Call `create_goal` with the exact Markdown objective.
+2. Save its hash with `python3 scripts/chain_state.py set-goal --objective-file <goal-file>`.
+3. Work until the stop conditions are met or a real blocker is reached.
+
+## Closeout lane
+
+### Completed goal
+
+1. Verify every stop condition with current evidence.
+2. Call `update_goal` with `complete`.
+3. Run `save-session` with the completed objective as `reference-only`; make the checkpoint's next action the next product-plan decision, not continuation of completed work.
+4. Stop instead of spawning when the phase exit gate is complete, the next work crosses an authority boundary, or the chain reached `max_hops`.
+5. Otherwise run `python3 scripts/chain_state.py prepare-handoff --kind next-goal`.
+
+### Unfinished emergency handoff
+
+Use only after an actual automatic compaction or when the current task cannot safely finish without another one:
+
+1. Keep the active goal unfinished.
+2. Run `save-session` with the exact `get_goal` objective and `SAVE_SESSION_GOAL_RESUME_POLICY=ensure-active`.
+3. Run `python3 scripts/chain_state.py prepare-handoff --kind continue-goal`.
+
+### Create one successor
+
+Read the JSON from `prepare-handoff`. Continue only when `spawn_allowed` is `true`.
+
+1. Call `codex_app__list_projects` and match the project whose local root exactly equals the current repository root.
+2. Call `codex_app__create_thread` once with that project id and a local environment. Do not choose a model unless the operator explicitly requested one.
+3. Use this initial prompt, substituting the returned values:
+
+   `This is an explicitly authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $resume-session first, then $session-orchestrate and claim nonce <nonce>. Preserve an unfinished saved goal exactly; otherwise choose the next session-sized goal from the current owner plan. Create at most one successor and stop at authority or phase boundaries.`
+
+4. Record the returned thread id with `python3 scripts/chain_state.py record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
+5. End the current task. Do not continue implementation after spawning.
+
+## Blocked or stopped
+
+For a genuine blocker, call `update_goal blocked` only after the platform's repeated-blocker threshold is met. Otherwise leave the goal active, checkpoint the blocker, and stop without spawning when operator input is required.
+
+Record the chain stop mechanically:
+
+`python3 scripts/chain_state.py stop --status stopped --reason "<specific reason>"`
+
+Use `completed` when the planned chain boundary is satisfied and `blocked` only for a true impasse.
+
+## Trial scorecard
+
+For each handoff record:
+
+- goal exactness: pass/fail
+- first action used saved route: pass/fail
+- duplicate successor: count, expected zero
+- operator repair prompts: count
+- compactions before handoff: count
+- approximate handoff overhead: tool calls and elapsed time
+- authority/phase stop correctness: pass/fail
+
+After two real handoffs, keep only if all safety checks pass and at least one task avoided broad rediscovery or repeat compaction. Otherwise refine once; if the second trial remains flat or worse, delete the skill and hook.
