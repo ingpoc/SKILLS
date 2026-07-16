@@ -252,7 +252,7 @@ def parser() -> argparse.ArgumentParser:
 
     command = commands.add_parser("init")
     command.add_argument("--chain-id")
-    command.add_argument("--max-hops", type=int, default=3, choices=range(1, 11))
+    command.add_argument("--max-hops", type=int, default=3, choices=range(1, 13))
     command.add_argument("--phase-boundary", required=True)
     command.set_defaults(handler=init)
 

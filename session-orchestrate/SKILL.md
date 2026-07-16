@@ -1,63 +1,67 @@
 ---
 name: session-orchestrate
-description: "Run an explicit, bounded experiment that splits a long project outcome across fresh Codex tasks in the same project. Use when the operator invokes $session-orchestrate, asks to continue the exact saved goal automatically, orchestrate sessions, continue across tasks, avoid repeated compaction, or set a session-sized goal from the current plan. A bare explicit invocation is sufficient to resume an ensure-active checkpoint; do not require a magic authorization phrase."
-allowed-tools: Read Bash get_goal create_goal update_goal codex_app__list_projects codex_app__create_thread
+description: "Orchestrate product-plan completion across bounded Codex tasks. Use when the operator invokes $session-orchestrate, asks to continue eligible saved work, derive implementation goals from a roadmap, coordinate work across sessions, or avoid repeated compaction. A bare invocation rebuilds current product and implementation state; it resumes saved work only when resume-session proves the checkpoint fresh and consistent and the current owner plan still permits it."
+allowed-tools: Read Bash Grep Glob get_goal create_goal update_goal update_plan codex_app__list_projects codex_app__create_thread
 ---
 
-# session-orchestrate — bounded fresh-task chaining
+# session-orchestrate — product-plan completion across bounded tasks
 
-> **Self-validate after edits.** Any change to this skill's files must be followed by `./scripts/validate.sh` from the skill directory.
+> **Self-validate after edits.** Run `./scripts/validate.sh` from this skill directory after any change.
 
-This is an opt-in experiment, not an infinite autonomous loop. It chooses one substantial, verifiable goal that should fit a fresh task, preserves exact goal state through `save-session` and `resume-session`, and creates at most one successor task per completed handoff. Running `$session-orchestrate` is itself the operator's resume signal for the exact `ensure-active` checkpoint; never ask for a fixed follow-up sentence.
+This skill reads the repository's product-plan owner, assesses implementation against live evidence, derives the ordered remaining session goals, executes one goal, and creates at most one same-project successor per handoff. It preserves exact unfinished work through `save-session` and `resume-session`. Running `$session-orchestrate` authorizes orchestration now; it does not make old checkpoint or session-history details true.
 
 ## Operating contract
 
 | Field | Decision |
 |---|---|
-| Primary archetype | agent orchestration with deterministic transaction helpers |
-| Operator trigger | explicit `$session-orchestrate` invocation or an explicit request to create a successor task |
-| Success evidence | exact goal round-trip, one same-project successor, no duplicate spawn, and a mechanically recorded stop reason |
+| Primary archetype | product-program orchestration with deterministic transaction helpers |
+| Operator trigger | explicit `$session-orchestrate` invocation or explicit successor-task request |
+| Success evidence | owner-backed remaining-goal map, verified session goal, exact goal round-trip, one successor, no duplicate spawn, and a mechanical stop reason |
 | Persistent state | project `.claude/session-data/ORCHESTRATION.json`; tactical work remains in `CURRENT.md` |
-| Default bound | three task hops; extension requires fresh operator authorization |
-| Judgment surface | choosing the next session-sized goal and deciding whether its stop conditions are truly met |
+| Default bound | remaining goals in the current authorized phase, capped at 12 task hops |
+| Judgment surface | mapping plan gates to implementation evidence, ordering remaining goals, and deciding whether proof is sufficient |
 
 ## Main flow
 
-First run `python3 scripts/entry.py`. It resolves the checkpoint, writes an exact resumable objective to a private temporary file, and classifies the existing chain. Then read [references/workflow.md](references/workflow.md) and follow the matching entry or closeout lane. Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition, [scripts/validate_goal.py](scripts/validate_goal.py) before calling `create_goal`, and [scripts/checkpoint.py](scripts/checkpoint.py) for exact-goal closeout without hand-built shell environment blocks.
+Run `python3 scripts/entry.py` before broad retrieval. It delegates checkpoint eligibility to `resume-session`, checks chain consistency, and returns a bounded inventory of owner routes, plan/status candidates, git evidence, local skills, and recent project-session hints. Read [references/workflow.md](references/workflow.md), rebuild the program map from current owners, and follow the returned mode.
+
+Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition, [scripts/validate_goal.py](scripts/validate_goal.py) before `create_goal`, and [scripts/checkpoint.py](scripts/checkpoint.py) for exact-goal closeout.
 
 ## Gotchas
 
 | Failure | Control |
 |---|---|
-| A broad phase objective causes repeated compaction | Split at one product-plan deliverable plus its narrow verification gate; reject goals outside the validator's size envelope. |
-| Two tasks create the same successor | `prepare-handoff` issues one nonce and refuses another spawn while a handoff is pending. |
-| A completed goal is accidentally recreated | Save completed goals as `reference-only`; only unfinished emergency handoffs use `ensure-active`. |
-| A chain crosses deployment, spend, auth, or phase gates | Stop the chain and checkpoint the authority requirement instead of creating a successor. |
-| A hook guesses context from transcript bytes | The only hook runs after an actual automatic compaction and only when an active orchestration state exists. |
-| The agent keeps designing after the owner route is known | After one bounded owner read, make the smallest concrete attempt in the next tool action or checkpoint a blocker. |
-| Closeout stalls on multiline shell quoting | Use `checkpoint.py` with the exact goal file; do not assemble the save-session environment manually. |
+| A broad phase objective causes repeated compaction | Split at one plan deliverable plus its narrow integration seam and verification gate. |
+| Two tasks create the same successor | `prepare-handoff` issues one nonce and refuses another spawn while pending. |
+| A completed goal is recreated | Save completed goals as `reference-only`; only unfinished handoffs use `ensure-active`. |
+| A chain crosses an authority or phase gate | Stop and record the requirement instead of creating a successor. |
+| A fresh task contains an old `CURRENT.md` | `entry.py` returns `review-checkpoint`; never auto-create its saved goal. |
+| Past sessions look more complete than the repository | History and skill mentions are hints; current owners and live acceptance evidence win. |
+| File or commit counts look like progress | Never manufacture a completion percentage; score only explicit, evidenced plan gates. |
+| The derived goal map becomes another roadmap | Keep it disposable in the task plan; update only the repo-declared implementation owner. |
+| The agent keeps designing after the route is known | After the map and goal pass, make the smallest concrete attempt in the next tool action. |
 
 ## Hard rules
 
-1. **Explicit invocation is consent.** A bare `$session-orchestrate` invocation authorizes resuming the exact `ensure-active` checkpoint and creating at most one bounded successor within chain limits. Do not request a magic phrase. It does not broaden the saved objective or constraints.
-2. **One task, one goal.** Keep the exact objective stable until it is completed, blocked, or handed off unfinished because silent goal drift invalidates the experiment.
-3. **Deterministic bounds win.** Never exceed `max_hops`, bypass a pending nonce, or let model judgment declare a mechanical check passed because those controls prevent runaway and duplicate work.
-4. **Authority gates stop the chain.** Provider spend, deployment, external sends, destructive operations, secrets, and new product-phase authorization require the operator.
-5. **Same project is mandatory.** Resolve the exact project root with `codex_app__list_projects`; do not create a projectless successor because projectless tasks lose the intended workspace contract.
-6. **No broad rediscovery.** Resume from `CURRENT.md`, verify its first command, then load only the owner section needed for the next goal.
-7. **Concrete work follows goal creation.** After one bounded owner read, the next tool action must attempt the first implementation or verification step because repeated design is not progress.
-8. **Renew only saved scope.** Invocation renews an already-authorized reversible retry in the saved goal or route, including a prior temporary retry-window stop. It never authorizes provider spend, deployment, external sends, destructive actions, credential inspection, or a new product phase unless those receive separate explicit authority.
+1. **Rebuild current state.** Read the product-plan owner and implementation evidence on every invocation. Resume saved work only when it is mechanically eligible and still permitted by the current plan.
+2. **One task, one goal.** Keep the exact objective stable until completion, a real blocker, or an unfinished handoff.
+3. **Two planning levels.** The program map names all ordered remaining goals; `create_goal` receives only the selected session goal and its concrete actions.
+4. **Deterministic bounds win.** Never exceed `max_hops`, bypass a pending nonce, or replace a mechanical failure with model judgment.
+5. **Authority gates stop the chain.** Spend, deployment, external sends, destructive operations, secrets, authentication, and new product phases require their normal authority.
+6. **Same project is mandatory.** Resolve the exact project root before creating a successor.
+7. **Bounded discovery.** Read the declared route first, then minimal plan/status slices and live proof. Inspect no more than three recent project sessions for conventions, friction, or relevant skills.
+8. **One owner per fact.** Product plan owns intended completion; the repo status surface owns durable progress; `CURRENT.md` owns tactical handoff; `ORCHESTRATION.json` owns chain mechanics.
+9. **History is not truth.** Git history, past sessions, file presence, and prior skills may route investigation but cannot prove completion or grant authority.
 
 ## Cross-references
 
-- [references/workflow.md](references/workflow.md) — entry, goal selection, handoff, and keep/drop criteria
+- [references/workflow.md](references/workflow.md) — source precedence, program mapping, goal selection, negative scenarios, handoff, and closeout
+- [scripts/project_inventory.py](scripts/project_inventory.py) — bounded read-only owner, plan, status, git, local-skill, and project-session inventory
+- [scripts/entry.py](scripts/entry.py) — checkpoint, chain, and project-inventory entry resolver
 - [scripts/chain_state.py](scripts/chain_state.py) — nonce-protected chain transaction state
-- [scripts/entry.py](scripts/entry.py) — deterministic checkpoint and chain entry resolver
 - [scripts/validate_goal.py](scripts/validate_goal.py) — session-goal shape and size gate
-- [scripts/checkpoint.py](scripts/checkpoint.py) — deterministic exact-goal save-session wrapper
+- [scripts/checkpoint.py](scripts/checkpoint.py) — exact-goal `save-session` wrapper
 - [scripts/postcompact_nudge.py](scripts/postcompact_nudge.py) — active-chain-only fallback after automatic compaction
+- [scripts/test_project_inventory.py](scripts/test_project_inventory.py) — discovery bounds and no-session-message-echo assertions
+- [scripts/test_session_orchestrate.py](scripts/test_session_orchestrate.py) — transaction, entry, freshness, conflict, hook, and checkpoint assertions
 - sibling skills: `save-session`, `resume-session`, `session-introspection`
-
-## Why this skill exists
-
-Long Codex tasks can spend context repeatedly reconstructing tactical state after compaction. This experiment tests whether bounded fresh tasks with exact checkpoints are cheaper and more reliable. If repeated trials do not improve continuity or the handoff overhead exceeds the saved rediscovery, remove this skill and its `PostCompact` hook.

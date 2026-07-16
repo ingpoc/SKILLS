@@ -1,77 +1,109 @@
 # Session orchestration workflow
 
-## Experiment hypothesis
+## Outcome contract
 
-Bounded fresh tasks are useful only if they preserve exact intent while reducing repeated discovery and compaction. Keep this workflow when two or more real handoffs satisfy all of these checks:
+`$session-orchestrate` turns the current product plan into a bounded sequence of session goals. It does not own product intent and it does not persist a second roadmap. Every task rebuilds a compact program view from current owner documents and live evidence, then executes one goal.
 
-1. The successor restores the exact unfinished goal or intentionally selects the next goal after a completed one.
-2. The successor begins from the saved first command without broad repository rediscovery.
-3. Exactly one successor is created for each handoff.
-4. Phase, spend, deployment, authentication, external-send, and destructive-action gates stop correctly.
-5. Save, resume, and task-creation overhead is smaller than the avoided rediscovery and repeated compaction.
+The two planning levels are different:
 
-Drop the workflow when handoffs repeatedly require operator repair, duplicate work, lose goal criteria, or add more ceremony than they save.
+- **Program map:** the ordered remaining goals needed to satisfy the product plan and its exit gates.
+- **Session goal:** one independently verifiable slice of that map, including the actions to perform now.
+
+The program map is derived and disposable. Product-plan and implementation-status owners remain authoritative.
+
+## Source precedence
+
+Use evidence in this order:
+
+1. Current user instructions and hard authority boundaries.
+2. Repository routing instructions and the owner route they declare.
+3. Product-plan, roadmap, phase, or acceptance-gate owner documents.
+4. Live implementation proof: code, tests, migrations, deployed/runtime evidence, and explicit status ledgers.
+5. A mechanically eligible `CURRENT.md` goal and matching chain state.
+6. Recent git history, project-session metadata, and prior skill usage as hints.
+
+Lower sources never override higher sources. A commit, file, stale checkpoint, or past-session claim is not completion proof by itself.
 
 ## Entry lane
 
-### Invocation contract
+1. Run `python3 scripts/entry.py` before broad retrieval. Its JSON includes checkpoint eligibility, chain consistency, owner candidates, plan/status candidates, recent commits, project-local skills, and bounded recent project-session hints.
+2. Call `get_goal`. Preserve a matching unfinished goal. A different unfinished goal is a conflict; do not replace it.
+3. Read the narrowest routing owner from `project_inventory.owner_routing_candidates`. Follow its declared product-plan or roadmap route. Filename candidates are fallback discovery only.
+4. Read only the plan sections needed to identify the current phase, ordered deliverables, dependencies, and exit gate.
+5. Read the implementation/status owner when one exists. Verify disputed or missing status against live repository or runtime evidence.
+6. Use recent project sessions only to learn recurring actions, known friction, or relevant skills. Inspect at most three matching sessions and never use them as completion or authorization evidence.
 
-The operator invoking `$session-orchestrate` is the authorization signal. Do not ask them to repeat a fixed sentence such as "authorize a new recovery window."
+### Checkpoint decisions
 
-1. Run `python3 scripts/entry.py` before broad retrieval.
-2. When it returns `mode: resume-exact-goal`, call `get_goal` and compare against the exact objective in `goal_file`:
-   - matching active goal -> reuse it;
-   - no goal or the same goal in `blocked` state -> call `create_goal` with the exact file content; this invocation begins a fresh blocked audit;
-   - a different active goal -> stop for conflict resolution;
-   - the same goal already completed -> treat the checkpoint as stale and choose the next goal.
-3. The invocation renews one bounded execution window for actions already authorized by that saved objective and route. A prior stop caused only by an expired retry window, temporary browser/tooling state, or operator pause is not a reason to ask for another phrase.
-4. Preserve every saved constraint. Invocation alone never authorizes spend, deployment, external sends, destructive operations, credential inspection, or a phase change.
-5. Follow `chain_action`: reuse an active chain, claim only a nonce-addressed pending handoff, or initialize a new bounded chain. For `resume-goal-chain-closed`, continue the exact goal in the current task while leaving the stopped chain untouched and creating no successor; the old boundary remains evidence, not a ban on in-task work.
+| Entry mode | Meaning | Required action |
+|---|---|---|
+| `resume-exact-goal` | Mechanically fresh and chain-consistent candidate | Confirm the current owner plan still permits the exact goal and its constraints, then reuse/create only that exact goal. |
+| `review-checkpoint` | Stale, malformed, divergent, completed, or conflicting state | Never activate the saved objective. Reconcile against current owner state and select through the new-goal lane. |
+| `choose-next-goal` | No activatable saved goal | Build the program map from current owner state. |
 
-### Preflight
+Freshness is necessary, not sufficient. A product-plan change, newly completed work, a different active goal, or a new authority gate can still invalidate an otherwise fresh checkpoint.
 
-1. Call `get_goal`. Preserve a matching unfinished goal; never replace a different unfinished goal.
-2. Run `resume-session` when `CURRENT.md` exists, then use the exact goal file returned by `entry.py`. Verify any saved first command against current repository evidence before executing it.
-3. Inspect the narrow owner section for delivery order. In BrandGPT, read the current `PRODUCTPLAN` phase section and its exit gate.
-4. Initialize or claim chain state:
-   - New chain: `python3 scripts/chain_state.py init --max-hops 3 --phase-boundary "<boundary>"`
-   - Successor: `python3 scripts/chain_state.py claim --nonce "<nonce>"`
+If no product/roadmap owner exists, use an explicit current user objective as the temporary completion contract. If neither exists, stop for product-owner direction; do not fabricate a roadmap from repository shape or old sessions.
 
-### Choose the goal
+## Build the program map
 
-Choose one goal that has meaningful implementation plus verification but does not contain an entire product phase. A good goal usually owns one deliverable, one narrow integration seam, and its directly relevant proof.
+Before selecting a goal, state a compact map containing:
 
-Write the exact objective to a temporary Markdown file using these headings:
+1. **Completion gate:** the observable product-plan outcome and current phase boundary.
+2. **Implemented evidence:** deliverables already proven, with owner sections or live proof.
+3. **Unknowns:** claims that lack enough evidence; do not count them complete.
+4. **Remaining goals:** ordered session-sized outcomes with prerequisites and authority gates.
+5. **Selected goal:** the first unblocked goal whose prerequisites are satisfied.
+
+Each remaining goal must name:
+
+- one product-plan deliverable or narrow integration seam;
+- prerequisites;
+- concrete actions;
+- observable verification;
+- stop and authority boundaries.
+
+Do not report a completion percentage from file counts, commit counts, test counts, or prose checkboxes. Report a percentage only when the owner plan defines a finite acceptance-gate denominator and every completed item has evidence.
+
+Use the current task plan surface for the program map when available. Do not create `PROGRAM.md`, `ROADMAP.md`, or another durable plan unless the repository explicitly declares that surface as the implementation-plan owner. When an implementation owner exists, update it after verified progress instead of creating a parallel ledger.
+
+## Choose and start one session goal
+
+Write the selected objective to a private temporary Markdown file with:
 
 - `## Outcome`
+- `## Plan linkage`
 - `## Scope`
+- `## Actions`
 - `## Constraints`
 - `## Verification`
 - `## Stop conditions`
 
-Run `python3 scripts/validate_goal.py <goal-file>`. The deterministic envelope is 180–450 words with at least one concrete list item in Scope, Verification, and Stop conditions. If it fails, split or tighten the goal; do not loosen the validator to admit a phase-sized objective.
+The objective should be 180–450 words. `Actions`, `Verification`, and `Stop conditions` must contain concrete list items. For a legacy exact checkpoint, preserve its text exactly; do not rewrite it merely to adopt the newer template.
 
-After validation:
+Run `python3 scripts/validate_goal.py <goal-file>`. For an eligible legacy checkpoint that must remain byte-for-byte exact, use `python3 scripts/validate_goal.py <goal-file> --legacy-resume`; never use that exception for a newly selected goal. After validation:
 
-1. Call `create_goal` with the exact Markdown objective.
-2. Save its hash with `python3 scripts/chain_state.py set-goal --objective-file <goal-file>`.
-3. Load at most one bounded owner slice needed for the first action.
-4. The next tool action must be the smallest concrete implementation or verification attempt. Do not open a second design cycle. If no concrete attempt is safe, checkpoint the specific blocker and stop.
-5. Work until the stop conditions are met or a real blocker is reached.
+1. Call `create_goal` with the exact Markdown objective, unless a matching unfinished goal already exists.
+2. Initialize the chain with a hop budget equal to the number of session goals in the current authorized phase, capped at 12: `python3 scripts/chain_state.py init --max-hops <count> --phase-boundary "<boundary>"`. A successor claims its pending nonce instead.
+3. Save the exact goal hash with `python3 scripts/chain_state.py set-goal --objective-file <goal-file>`.
+4. Load only the owner slice and skills needed for the first action. Past skill usage is a routing hint, not a requirement to reload every prior skill.
+5. Make the smallest concrete implementation or verification attempt in the next tool action.
+6. Continue until the stop conditions pass or a real blocker/authority boundary is reached.
 
 ## Closeout lane
 
 ### Completed goal
 
 1. Verify every stop condition with current evidence.
-2. Call `update_goal` with `complete`.
-3. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy reference-only --next-action "<next product-plan decision>" --verification "<proof summary>"`; do not hand-build multiline save-session environment variables.
-4. Stop instead of spawning when the phase exit gate is complete, the next work crosses an authority boundary, or the chain reached `max_hops`.
-5. Otherwise run `python3 scripts/chain_state.py prepare-handoff --kind next-goal`.
+2. Update the owning implementation/status surface if the repository declares one.
+3. Call `update_goal complete`.
+4. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy reference-only --next-action "<next program-map decision>" --verification "<proof summary>"`.
+5. Rebuild the compact program map. Stop when the product/phase exit gate is complete, the next work crosses an authority boundary, or the chain reaches `max_hops`.
+6. Otherwise run `python3 scripts/chain_state.py prepare-handoff --kind next-goal`.
 
-### Unfinished emergency handoff
+### Unfinished handoff
 
-Use only after an actual automatic compaction or when the current task cannot safely finish without another one:
+Use only after actual automatic compaction or when another task is required to finish the same authorized goal:
 
 1. Keep the active goal unfinished.
 2. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
@@ -79,39 +111,37 @@ Use only after an actual automatic compaction or when the current task cannot sa
 
 ### Create one successor
 
-Read the JSON from `prepare-handoff`. Continue only when `spawn_allowed` is `true`.
+Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 
-1. Call `codex_app__list_projects` and match the project whose local root exactly equals the current repository root.
-2. Call `codex_app__create_thread` once with that project id and a local environment. Do not choose a model unless the operator explicitly requested one.
-3. Use this initial prompt, substituting the returned values:
+1. Match the exact current repository root to a Codex project.
+2. Create exactly one same-project successor task.
+3. Use this prompt:
 
-   `This is an explicitly authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $resume-session first, then $session-orchestrate and claim nonce <nonce>. Preserve an unfinished saved goal exactly; otherwise choose the next session-sized goal from the current owner plan. Create at most one successor and stop at authority or phase boundaries.`
+   `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate and claim nonce <nonce>. Rebuild the program map from current product-plan and implementation evidence. Preserve a still-eligible unfinished goal exactly; otherwise choose the next unblocked session goal. Create at most one successor and stop at authority or phase boundaries.`
 
-4. Record the returned thread id with `python3 scripts/chain_state.py record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
+4. Record the task id with `python3 scripts/chain_state.py record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
 5. End the current task. Do not continue implementation after spawning.
 
-## Blocked or stopped
+## Negative scenarios
 
-For a genuine blocker, call `update_goal blocked` only after the platform's repeated-blocker threshold is met. Otherwise leave the goal active, checkpoint the blocker, and stop without spawning when operator input is required.
+| Scenario | Result |
+|---|---|
+| Fresh task, no checkpoint | Build the map from current owner state. |
+| Old or future-dated checkpoint | Review only; never activate it. |
+| Wrong root, branch, missing commit, or invalid route | Review only. |
+| Fresh checkpoint but product plan changed | Reconcile; use the normal new-goal lane if the exact goal is no longer current. |
+| Matching checkpoint but chain goal hash differs | Review conflict; do not create a goal. |
+| Completed chain or completed active goal | Select the next current goal; never reopen it. |
+| Different active goal | Stop for conflict resolution. |
+| Product plan exists but status is unclear | Verify live evidence and mark unknown, not complete. |
+| No product plan and no explicit product objective | Stop for product-owner direction. |
+| Past sessions disagree with current owner docs | Current owner docs and live evidence win. |
+| Remaining work crosses spend, deployment, auth, destructive, secret, external-send, or phase authority | Stop and record the specific gate. |
 
-Record the chain stop mechanically:
+## Mechanical stop
+
+Record a chain stop with:
 
 `python3 scripts/chain_state.py stop --status stopped --reason "<specific reason>"`
 
-Use `completed` when the planned chain boundary is satisfied and `blocked` only for a true impasse.
-
-## Trial scorecard
-
-For each handoff record:
-
-- goal exactness: pass/fail
-- first action used saved route: pass/fail
-- duplicate successor: count, expected zero
-- operator repair prompts: count
-- compactions before handoff: count
-- approximate handoff overhead: tool calls and elapsed time
-- authority/phase stop correctness: pass/fail
-
-Record observed counters with `chain_state.py record-metric`. Operator steering that is required to escape repeated planning, retry, or closeout work counts as an operator repair.
-
-After two real handoffs, keep only if all safety checks pass and at least one task avoided broad rediscovery or repeat compaction. Otherwise refine once; if the second trial remains flat or worse, delete the skill and hook.
+Use `completed` only when the authorized phase or product completion gate is proven. Use `blocked` only for a true impasse under the platform's repeated-blocker rule.

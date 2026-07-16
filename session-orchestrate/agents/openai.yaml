@@ -1,7 +1,7 @@
 interface:
   display_name: "Session Orchestrate"
   short_description: "Chain bounded Codex tasks with exact checkpoint handoffs"
-  default_prompt: "Use $session-orchestrate to resume the exact ensure-active checkpoint automatically when present; otherwise choose one session-sized goal. Treat this invocation as consent for the saved bounded work, require no magic follow-up phrase, preserve all hard authority gates, and create no more than one successor."
+  default_prompt: "Use $session-orchestrate to inspect the current project owner state, product plan, implementation evidence, and bounded project-session hints. Resume an exact ensure-active checkpoint only when $resume-session classifies it as fresh and consistent and the current owner plan still permits it; review stale or conflicting checkpoints without activating them; otherwise derive the ordered remaining goals and execute one session-sized goal. Preserve all hard authority gates and create no more than one successor."
 
 policy:
   allow_implicit_invocation: false

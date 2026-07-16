@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -23,8 +24,14 @@ def goal(words: int = 220) -> str:
     return f"""## Outcome
 Deliver one bounded result with traceable evidence. {filler}
 
+## Plan linkage
+This goal advances one current owner-plan deliverable and its acceptance gate.
+
 ## Scope
 - Implement one owned deliverable and its direct integration seam.
+
+## Actions
+- Read the narrow owner slice, implement the deliverable, and run its direct proof.
 
 ## Constraints
 Preserve exact goal text and avoid external effects.
@@ -41,7 +48,11 @@ class SessionOrchestrateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.env = {**os.environ, "SESSION_ORCHESTRATE_ROOT": str(self.root)}
+        self.env = {
+            **os.environ,
+            "SESSION_ORCHESTRATE_ROOT": str(self.root),
+            "SESSION_ORCHESTRATE_SESSION_LIMIT": "0",
+        }
         self.entry_goal_files: list[Path] = []
 
     def tearDown(self) -> None:
@@ -60,11 +71,17 @@ class SessionOrchestrateTests(unittest.TestCase):
         path.write_text(goal(words), encoding="utf-8")
         return path
 
-    def write_checkpoint(self, policy: str, objective: str) -> Path:
+    def write_checkpoint(self, policy: str, objective: str, *, age_hours: int = 0) -> Path:
         path = self.root / ".claude" / "session-data" / "CURRENT.md"
         path.parent.mkdir(parents=True, exist_ok=True)
+        saved_at = datetime.now(timezone.utc) - timedelta(hours=age_hours)
         path.write_text(
             "# Session checkpoint\n\n"
+            f"**time:** {saved_at.isoformat().replace('+00:00', 'Z')}\n"
+            f"**repo_root:** {self.root}\n"
+            "**branch:** unknown\n"
+            "**last_commit:** unknown\n"
+            "**resume_window_hours:** 24\n\n"
             "## codex_goal\n"
             f"resume_policy: {policy}\n"
             "objective:\n"
@@ -88,6 +105,25 @@ class SessionOrchestrateTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(VALIDATE), str(self.write_goal())], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_goal_validator_limits_legacy_shape_to_exact_resume(self) -> None:
+        legacy = goal().replace(
+            "\n## Plan linkage\nThis goal advances one current owner-plan deliverable and its acceptance gate.\n",
+            "",
+        ).replace(
+            "\n## Actions\n- Read the narrow owner slice, implement the deliverable, and run its direct proof.\n",
+            "",
+        )
+        path = self.root / "legacy.md"
+        path.write_text(legacy, encoding="utf-8")
+        rejected = subprocess.run([sys.executable, str(VALIDATE), str(path)], text=True, capture_output=True)
+        self.assertEqual(rejected.returncode, 1)
+        accepted = subprocess.run(
+            [sys.executable, str(VALIDATE), str(path), "--legacy-resume"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
     def test_entry_extracts_exact_ensure_active_goal(self) -> None:
         objective = goal()
         self.write_checkpoint("ensure-active", objective)
@@ -99,9 +135,18 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(goal_file.read_text(encoding="utf-8").rstrip(), objective.rstrip())
         self.assertEqual(goal_file.stat().st_mode & 0o777, 0o600)
 
+    def test_fresh_task_without_checkpoint_builds_current_project_inventory(self) -> None:
+        (self.root / "AGENTS.md").write_text("Use the current product-plan owner.\n", encoding="utf-8")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "choose-next-goal")
+        self.assertIn("checkpoint_missing", output["reasons"])
+        self.assertEqual(output["project_inventory"]["owner_routing_candidates"], ["AGENTS.md"])
+        self.assertIsNone(output["goal_file"])
+
     def test_entry_reuses_active_chain(self) -> None:
         self.write_checkpoint("ensure-active", goal())
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        self.run_state("set-goal", "--objective-file", str(self.write_goal()))
         output = json.loads(self.run_entry().stdout)
         self.assertEqual(output["chain_action"], "reuse-active-chain")
         self.assertEqual(output["chain"]["phase_boundary"], "Phase 5")
@@ -109,10 +154,40 @@ class SessionOrchestrateTests(unittest.TestCase):
     def test_entry_resumes_goal_without_reopening_stopped_chain(self) -> None:
         self.write_checkpoint("ensure-active", goal())
         self.run_state("init", "--max-hops", "1", "--phase-boundary", "Phase 5")
+        self.run_state("set-goal", "--objective-file", str(self.write_goal()))
         self.run_state("stop", "--status", "stopped", "--reason", "retry window ended")
         output = json.loads(self.run_entry().stdout)
         self.assertEqual(output["chain_action"], "resume-goal-chain-closed")
         self.assertEqual(output["chain"]["stop_reason"], "retry window ended")
+
+    def test_entry_does_not_activate_expired_checkpoint(self) -> None:
+        self.write_checkpoint("ensure-active", goal(), age_hours=25)
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "review-checkpoint")
+        self.assertEqual(output["chain_action"], "review-current-owner")
+        self.assertIn("checkpoint_expired", output["reasons"])
+        self.assertIsNone(output["goal_file"])
+
+    def test_entry_rejects_chain_goal_hash_mismatch(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        different = self.root / "different-goal.md"
+        different.write_text(goal().replace("one bounded result", "a different bounded result"), encoding="utf-8")
+        self.run_state("set-goal", "--objective-file", str(different))
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "review-checkpoint")
+        self.assertIn("chain_goal_hash_mismatch", output["reasons"])
+        self.assertIsNone(output["goal_file"])
+
+    def test_entry_does_not_reopen_completed_chain(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        self.run_state("set-goal", "--objective-file", str(self.write_goal()))
+        self.run_state("stop", "--status", "completed", "--reason", "goal complete")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "review-checkpoint")
+        self.assertIn("chain_completed", output["reasons"])
+        self.assertIsNone(output["goal_file"])
 
     def test_entry_does_not_resume_reference_only_goal(self) -> None:
         self.write_checkpoint("reference-only", goal())
@@ -167,6 +242,12 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertFalse(result["spawn_allowed"])
         self.assertEqual(result["reason"], "max_hops_reached")
 
+    def test_phase_goal_budget_accepts_twelve_and_rejects_thirteen(self) -> None:
+        accepted = self.run_state("init", "--max-hops", "12", "--phase-boundary", "Phase 5")
+        self.assertEqual(json.loads(accepted.stdout)["max_hops"], 12)
+        rejected = self.run_state("init", "--max-hops", "13", "--phase-boundary", "Phase 5", ok=False)
+        self.assertNotEqual(rejected.returncode, 0)
+
     def test_postcompact_is_silent_without_active_chain(self) -> None:
         event = json.dumps({"cwd": str(self.root), "hook_event_name": "PostCompact"})
         result = subprocess.run([sys.executable, str(POSTCOMPACT)], input=event, text=True, capture_output=True)
@@ -198,6 +279,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         saved = (self.root / ".claude" / "session-data" / "CURRENT.md").read_text(encoding="utf-8")
         self.assertIn(goal_path.read_text(encoding="utf-8").rstrip(), saved)
         self.assertIn("resume_policy: ensure-active", saved)
+        self.assertIn("**resume_window_hours:** 24", saved)
 
     def test_record_metric_works_after_stop(self) -> None:
         self.run_state("init", "--max-hops", "1", "--phase-boundary", "Phase 5")

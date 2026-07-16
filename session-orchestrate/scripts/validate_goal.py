@@ -9,8 +9,9 @@ from pathlib import Path
 
 MIN_WORDS = 180
 MAX_WORDS = 450
-REQUIRED = ("Outcome", "Scope", "Constraints", "Verification", "Stop conditions")
-LIST_REQUIRED = ("Scope", "Verification", "Stop conditions")
+BASE_REQUIRED = ("Outcome", "Scope", "Constraints", "Verification", "Stop conditions")
+NEW_REQUIRED = ("Plan linkage", "Actions")
+BASE_LIST_REQUIRED = ("Scope", "Verification", "Stop conditions")
 
 
 def section(text: str, name: str) -> str:
@@ -19,7 +20,7 @@ def section(text: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def validate(text: str) -> list[str]:
+def validate(text: str, *, legacy_resume: bool = False) -> list[str]:
     errors: list[str] = []
     words = re.findall(r"\b[\w'-]+\b", text)
     if len(words) < MIN_WORDS:
@@ -27,11 +28,13 @@ def validate(text: str) -> list[str]:
     if len(words) > MAX_WORDS:
         errors.append(f"goal is too long: {len(words)} words; maximum is {MAX_WORDS}")
 
-    for name in REQUIRED:
+    required = BASE_REQUIRED if legacy_resume else (*BASE_REQUIRED, *NEW_REQUIRED)
+    for name in required:
         if not section(text, name):
             errors.append(f"missing or empty section: ## {name}")
 
-    for name in LIST_REQUIRED:
+    list_required = BASE_LIST_REQUIRED if legacy_resume else (*BASE_LIST_REQUIRED, "Actions")
+    for name in list_required:
         body = section(text, name)
         if body and not re.search(r"(?m)^\s*(?:[-*]|\d+\.)\s+\S", body):
             errors.append(f"section requires at least one concrete list item: ## {name}")
@@ -42,6 +45,11 @@ def validate(text: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a session-sized Codex goal")
     parser.add_argument("goal_file", type=Path)
+    parser.add_argument(
+        "--legacy-resume",
+        action="store_true",
+        help="allow the old goal shape only when preserving an eligible checkpoint exactly",
+    )
     args = parser.parse_args()
     try:
         text = args.goal_file.read_text(encoding="utf-8")
@@ -49,7 +57,7 @@ def main() -> int:
         print(f"validate_goal: {exc}", file=sys.stderr)
         return 2
 
-    errors = validate(text)
+    errors = validate(text, legacy_resume=args.legacy_resume)
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)

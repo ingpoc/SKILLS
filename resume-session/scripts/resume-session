@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+INSPECTOR="${RESUME_SESSION_INSPECTOR:-$HOME/.codex/skills/resume-session/scripts/inspect_checkpoint.py}"
+if [ ! -f "$INSPECTOR" ]; then
+  printf 'resume-session inspector not found at %s\n' "$INSPECTOR" >&2
+  exit 2
+fi
+
+if [ "${1:-}" = "--inspect-json" ]; then
+  exec python3 "$INSPECTOR" --write-goal-file
+fi
+
+SESSION_FILE="$(python3 "$INSPECTOR" --path-only)"
+
+if [ ! -f "$SESSION_FILE" ]; then
+  printf 'No session checkpoint found at %s\n' "$SESSION_FILE" >&2
+  exit 1
+fi
+
+printf 'Resuming from %s\n\n' "$SESSION_FILE"
+cat "$SESSION_FILE"

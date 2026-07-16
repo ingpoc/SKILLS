@@ -1,67 +1,51 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
 
-POLICIES = {"ensure-active", "reference-only"}
+HERE = Path(__file__).resolve().parent
+INSPECTOR = HERE.parent.parent / "resume-session" / "scripts" / "inspect_checkpoint.py"
+INVENTORY = HERE / "project_inventory.py"
 
 
-def project_root() -> Path:
+def checkpoint_inspection() -> dict[str, Any]:
+    command = [sys.executable, str(INSPECTOR), "--write-goal-file"]
     override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
     if override:
-        return Path(override).expanduser().resolve()
+        command.extend(["--root", override])
     result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        command,
         text=True,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         check=False,
     )
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip()).resolve()
-    return Path.cwd().resolve()
+    if result.returncode != 0:
+        raise ValueError(result.stderr.strip() or "checkpoint inspector failed")
+    return json.loads(result.stdout)
 
 
-def parse_checkpoint(path: Path) -> tuple[str | None, str | None]:
-    if not path.exists():
-        return None, None
-    text = path.read_text(encoding="utf-8")
-    marker = "## codex_goal\n"
-    if marker not in text:
-        return None, None
-    section = text.split(marker, 1)[1].split("\n## working_on", 1)[0]
-    policy_line = next((line for line in section.splitlines() if line.startswith("resume_policy: ")), None)
-    if not policy_line:
-        raise ValueError("checkpoint codex_goal is missing resume_policy")
-    policy = policy_line.split(":", 1)[1].strip()
-    if policy not in POLICIES:
-        raise ValueError(f"unsupported checkpoint resume_policy: {policy}")
-    objective_marker = "objective:\n"
-    if objective_marker not in section:
-        raise ValueError("checkpoint codex_goal is missing objective")
-    objective = section.split(objective_marker, 1)[1].rstrip()
-    if policy == "ensure-active" and not objective:
-        raise ValueError("ensure-active checkpoint has an empty objective")
-    return policy, objective or None
-
-
-def private_goal_file(objective: str) -> tuple[Path, str]:
-    content = objective.rstrip() + "\n"
-    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    path = Path(tempfile.gettempdir()) / f"session-orchestrate-goal-{digest[:16]}.md"
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(content)
-    path.chmod(0o600)
-    return path, f"sha256:{digest}"
+def project_inventory(root: Path) -> dict[str, Any]:
+    command = [sys.executable, str(INVENTORY), "--root", str(root)]
+    session_limit = os.environ.get("SESSION_ORCHESTRATE_SESSION_LIMIT", "").strip()
+    if session_limit:
+        command.extend(["--session-limit", session_limit])
+    result = subprocess.run(
+        command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError(result.stderr.strip() or "project inventory failed")
+    return json.loads(result.stdout)
 
 
 def read_chain(path: Path) -> dict[str, Any] | None:
@@ -74,44 +58,62 @@ def read_chain(path: Path) -> dict[str, Any] | None:
 
 
 def chain_action(state: dict[str, Any] | None, mode: str) -> str:
+    if mode == "review-checkpoint":
+        return "review-current-owner"
     if not state:
         return "init-new-chain"
     status = state.get("status")
-    if status == "active":
-        return "reuse-active-chain"
-    if status == "handoff_pending":
-        return "claim-pending-handoff"
     if mode == "resume-exact-goal":
+        if status == "active":
+            return "reuse-active-chain"
+        if status == "handoff_pending":
+            return "claim-pending-handoff"
         return "resume-goal-chain-closed"
+    if status in {"active", "handoff_pending"}:
+        return "review-active-chain"
     return "init-new-chain"
 
 
+def downgrade(inspection: dict[str, Any], reason: str) -> None:
+    goal_file = inspection.get("goal_file")
+    if goal_file:
+        Path(goal_file).unlink(missing_ok=True)
+    inspection["goal_file"] = None
+    inspection["eligibility"] = "conflict"
+    inspection["mode"] = "review-checkpoint"
+    inspection["reasons"] = list(dict.fromkeys([*(inspection.get("reasons") or []), reason]))
+
+
 def main() -> int:
-    root = project_root()
-    checkpoint = root / ".claude" / "session-data" / "CURRENT.md"
-    state_path = root / ".claude" / "session-data" / "ORCHESTRATION.json"
     try:
-        policy, objective = parse_checkpoint(checkpoint)
+        inspection = checkpoint_inspection()
+        root = Path(inspection["project_root"])
+        state_path = root / ".claude" / "session-data" / "ORCHESTRATION.json"
         state = read_chain(state_path)
-        goal_path = None
-        goal_hash = None
-        if policy == "ensure-active" and objective:
-            goal_path, goal_hash = private_goal_file(objective)
+        inventory = project_inventory(root)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"entry: {exc}", file=sys.stderr)
         return 1
 
-    mode = "resume-exact-goal" if policy == "ensure-active" and objective else "choose-next-goal"
+    if inspection.get("mode") == "resume-exact-goal" and state:
+        recorded_hash = state.get("goal_hash")
+        if state.get("status") == "completed":
+            downgrade(inspection, "chain_completed")
+        elif recorded_hash and recorded_hash != inspection.get("goal_hash"):
+            downgrade(inspection, "chain_goal_hash_mismatch")
+        elif state.get("status") in {"active", "handoff_pending", "stopped", "blocked"} and not recorded_hash:
+            downgrade(inspection, "chain_goal_hash_missing")
+
+    mode = inspection["mode"]
     output = {
-        "success": True,
-        "project_root": str(root),
-        "checkpoint": str(checkpoint) if checkpoint.exists() else None,
-        "mode": mode,
-        "resume_policy": policy,
-        "goal_file": str(goal_path) if goal_path else None,
-        "goal_hash": goal_hash,
-        "invocation_authority": "saved-goal-only" if mode == "resume-exact-goal" else "new-bounded-chain",
+        **inspection,
+        "invocation_authority": {
+            "resume-exact-goal": "saved-goal-only",
+            "choose-next-goal": "new-bounded-chain",
+            "review-checkpoint": "orchestration-only",
+        }[mode],
         "chain_action": chain_action(state, mode),
+        "project_inventory": inventory,
         "chain": None if not state else {
             "chain_id": state.get("chain_id"),
             "status": state.get("status"),
@@ -119,6 +121,7 @@ def main() -> int:
             "max_hops": state.get("max_hops"),
             "phase_boundary": state.get("phase_boundary"),
             "stop_reason": state.get("stop_reason"),
+            "goal_hash": state.get("goal_hash"),
         },
     }
     print(json.dumps(output, indent=2, sort_keys=True))
