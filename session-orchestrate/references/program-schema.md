@@ -32,24 +32,57 @@ After reading current product-plan owners and implementation evidence, write a t
   "completion_gate": "An operator completes the product loop with traceable evidence.",
   "phase_boundary": "Phase 5",
   "plan_sources": ["docs/PRODUCTPLAN.md"],
-  "selected_goal_id": "actions-proof",
+  "selected_goal_id": "phase5-milestone",
   "goals": [
     {
-      "id": "actions-proof",
-      "title": "Prove the Actions workflow",
+      "id": "phase5-milestone",
+      "title": "Complete the Phase 5 accepted milestone",
       "status": "in_progress",
+      "delivery_unit": "project-lifecycle",
       "plan_ref": "PRODUCTPLAN Phase 5 exit gate",
       "prerequisites": [],
-      "actions": ["Exercise the target interaction on desktop and mobile."],
-      "verification": ["Trace every displayed value to retained evidence."],
+      "lifecycle_stages": [
+        {
+          "id": "implementation",
+          "kind": "implementation",
+          "title": "Accepted implementation",
+          "action": "complete the plan-owned scope and integration seam",
+          "route": "repository-declared implementation owner",
+          "acceptance": "the intended product behavior exists"
+        },
+        {
+          "id": "target-proof",
+          "kind": "verification",
+          "title": "Actual-target proof",
+          "action": "exercise the real repository-defined acceptance surface",
+          "route": "repository-local test, runtime, or visual-proof route",
+          "acceptance": "the owner-plan exit gate accepts the result"
+        }
+      ],
+      "verification": ["Prove every declared lifecycle stage or preserve its exact authority gate."],
       "evidence": [],
-      "authority_gates": ["Stop before deployment without operator authority."]
+      "authority_gates": ["Repository-declared runtime, promotion, authentication, spend, and external-action gates retain their normal authority."]
     }
   ]
 }
 ```
 
-Goal ids are unique kebab-case. Actions and verification cannot be empty. A completed goal requires at least one evidence reference. Every prerequisite must name another goal in the same map. While work remains, `selected_goal_id` is required and cannot point to a completed goal.
+Goal ids are unique kebab-case. `delivery_unit` defaults to `bounded-deliverable`; use `project-lifecycle` when several repository-defined stages serve one accepted milestone or exit gate. A project lifecycle contains two to eight ordered `lifecycle_stages`. Each stage has a unique id, a kind (`implementation`, `verification`, `promotion`, `handoff`, or `hardening`), one action, its exact repository route, stage acceptance, and an optional authority gate. It must contain implementation plus later verification. Promotion, handoff, and hardening are included only when the current repository requires them; the global skill never invents those stages. For a project lifecycle, omit top-level `actions` because the structured stages own them. A bounded deliverable instead uses non-empty `actions`. A completed goal requires evidence. Every prerequisite must name an earlier goal in the same map. While work remains, `selected_goal_id` is required and cannot point to a completed goal.
+
+When the repository declares a deterministic work selector, add:
+
+```json
+{
+  "selection_probe": {
+    "scope": "dynamic-queue",
+    "route": "repository-declared read-only next-work command",
+    "target": "exact normalized target returned by that command",
+    "source_refs": ["path/to/queue-owner.json"]
+  }
+}
+```
+
+The selected goal then requires an `admission_target` exactly equal to `selection_probe.target`. Every `source_refs` path must also be in `plan_sources` so owner changes stale the map. For `dynamic-queue`, retain completed evidence if useful but include only the admitted unfinished goal; refresh the selector after completion. `static-plan` may retain later ordered goals. Entry exposes the probe on every reuse so the agent can rerun that one read-only route before activating the goal.
 
 Synchronize and render atomically:
 
@@ -59,7 +92,7 @@ python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync \
   --program-file /tmp/session-program.json
 ```
 
-`sync` fingerprints every declared plan source. `status` returns `program_action: rebuild-plan` when a source changes, disappears, the generated projection is edited, or the next goal needs selection:
+`sync` fingerprints every declared plan source and records the current program-policy version. `status` returns `program_action: rebuild-plan` when a source changes, disappears, the generated projection is edited, the policy version changes, or the next goal needs selection:
 
 ```bash
 python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" status --root "$SESSION_ORCHESTRATE_ROOT"
@@ -72,7 +105,7 @@ Mark the selected goal active:
 ```bash
 python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark \
   --root "$SESSION_ORCHESTRATE_ROOT" \
-  --goal-id actions-proof \
+  --goal-id phase5-milestone \
   --status in_progress
 ```
 
@@ -81,7 +114,7 @@ Record completion only with evidence:
 ```bash
 python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark \
   --root "$SESSION_ORCHESTRATE_ROOT" \
-  --goal-id actions-proof \
+  --goal-id phase5-milestone \
   --status completed \
   --evidence "tests/phase5-proof.json"
 ```

@@ -10,9 +10,11 @@ from pathlib import Path
 MAX_WORDS = 300
 LEGACY_MAX_WORDS = 450
 BASE_REQUIRED = ("Outcome", "Scope", "Constraints", "Verification", "Stop conditions")
-NEW_REQUIRED = ("Plan linkage", "Acceptance gap", "Actions", "Expected durable delta")
+NEW_REQUIRED = ("Plan linkage", "Acceptance gap", "Expected durable delta")
 BASE_LIST_REQUIRED = ("Scope", "Verification", "Stop conditions")
-NEW_LIST_REQUIRED = ("Acceptance gap", "Actions", "Expected durable delta")
+NEW_LIST_REQUIRED = ("Acceptance gap", "Expected durable delta")
+DELIVERY_UNITS = ("bounded-deliverable", "project-lifecycle")
+LIFECYCLE_KINDS = ("implementation", "verification", "promotion", "handoff", "hardening")
 
 
 def section(text: str, name: str) -> str:
@@ -21,7 +23,12 @@ def section(text: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def validate(text: str, *, legacy_resume: bool = False) -> list[str]:
+def validate(
+    text: str,
+    *,
+    legacy_resume: bool = False,
+    delivery_unit: str = "bounded-deliverable",
+) -> list[str]:
     errors: list[str] = []
     words = re.findall(r"\b[\w'-]+\b", text)
     maximum = LEGACY_MAX_WORDS if legacy_resume else MAX_WORDS
@@ -40,6 +47,16 @@ def validate(text: str, *, legacy_resume: bool = False) -> list[str]:
             errors.append(f"section requires at least one concrete list item: ## {name}")
 
     if not legacy_resume:
+        actions = section(text, "Actions")
+        if delivery_unit == "bounded-deliverable" and not actions:
+            errors.append("missing or empty section: ## Actions")
+        if delivery_unit == "bounded-deliverable" and actions and not re.search(
+            r"(?m)^\s*(?:[-*]|\d+\.)\s+\S", actions
+        ):
+            errors.append("section requires at least one concrete list item: ## Actions")
+        if delivery_unit == "project-lifecycle" and actions:
+            errors.append("project lifecycle must omit ## Actions; ## Delivery lifecycle owns its actions")
+
         gap = section(text, "Acceptance gap")
         if gap and not re.search(r"(?mi)^\s*[-*]\s*current\s*:\s+\S", gap):
             errors.append("acceptance gap requires a '- Current: ...' item")
@@ -59,6 +76,28 @@ def validate(text: str, *, legacy_resume: bool = False) -> list[str]:
         if not delta_kinds.intersection({"implementation", "runtime"}):
             errors.append("durable delta requires an '- Implementation: ...' or '- Runtime: ...' item")
 
+        if delivery_unit == "project-lifecycle":
+            lifecycle = section(text, "Delivery lifecycle")
+            if not lifecycle:
+                errors.append("missing or empty section: ## Delivery lifecycle")
+            else:
+                kinds = [
+                    kind.lower()
+                    for kind in re.findall(
+                        rf"(?mi)^\s*[-*]\s*\[({'|'.join(LIFECYCLE_KINDS)})\]\s+\S",
+                        lifecycle,
+                    )
+                ]
+                if "implementation" not in kinds:
+                    errors.append("delivery lifecycle requires an [implementation] stage")
+                implementation_index = kinds.index("implementation") if "implementation" in kinds else -1
+                later_verification = any(
+                    kind == "verification" and index > implementation_index
+                    for index, kind in enumerate(kinds)
+                )
+                if not later_verification:
+                    errors.append("delivery lifecycle requires [verification] after [implementation]")
+
     return errors
 
 
@@ -70,6 +109,12 @@ def main() -> int:
         action="store_true",
         help="allow the old goal shape only when preserving an eligible checkpoint exactly",
     )
+    parser.add_argument(
+        "--delivery-unit",
+        choices=DELIVERY_UNITS,
+        default="bounded-deliverable",
+        help="apply the selected program goal's delivery-unit contract",
+    )
     args = parser.parse_args()
     try:
         text = args.goal_file.read_text(encoding="utf-8")
@@ -77,7 +122,11 @@ def main() -> int:
         print(f"validate_goal: {exc}", file=sys.stderr)
         return 2
 
-    errors = validate(text, legacy_resume=args.legacy_resume)
+    errors = validate(
+        text,
+        legacy_resume=args.legacy_resume,
+        delivery_unit=args.delivery_unit,
+    )
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)

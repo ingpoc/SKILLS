@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from session_workspace import canonical_paths, ensure_workspace
-from validate_goal import validate as validate_goal
+from session_workspace import canonical_paths, ensure_workspace, git_root
+from validate_goal import DELIVERY_UNITS, validate as validate_goal
 
 
 SCHEMA_VERSION = 1
@@ -38,16 +38,16 @@ def now() -> str:
 def project_root() -> Path:
     override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
     if override:
-        root = Path(override).expanduser().resolve()
+        root = git_root(Path(override).expanduser().resolve())
+        cwd_root = git_root(Path.cwd().resolve())
+        if root is None:
+            raise ValueError("SESSION_ORCHESTRATE_ROOT is not a Git repository")
+        if cwd_root is not None and cwd_root != root:
+            raise ValueError("SESSION_ORCHESTRATE_ROOT does not match the current repository")
     else:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        root = Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else Path.cwd().resolve()
+        root = git_root(Path.cwd().resolve())
+        if root is None:
+            raise ValueError("session-orchestrate requires invocation from a Git product repository")
     if root == SKILLS_REPOSITORY_ROOT:
         raise ValueError("refusing to mutate orchestration state in the global skills repository")
     return root
@@ -149,6 +149,8 @@ def set_goal(args: argparse.Namespace) -> int:
             expected = handoff.get("next_goal_hash") or state.get("goal_hash")
             if expected and digest != expected:
                 return fail("claimed handoff goal hash mismatch")
+        elif state.get("goal_hash") and state.get("goal_hash") != digest:
+            return fail("active chain is already bound to a different goal")
         state["goal_hash"] = digest
         if handoff.get("claimed_at"):
             state["handoff"] = None
@@ -187,7 +189,7 @@ def prepare_handoff(args: argparse.Namespace) -> int:
             if not args.next_objective_file:
                 return fail("next-goal handoff requires --next-objective-file")
             next_objective = args.next_objective_file.read_text(encoding="utf-8")
-            errors = validate_goal(next_objective)
+            errors = validate_goal(next_objective, delivery_unit=args.next_delivery_unit)
             if errors:
                 return fail("next goal failed admission: " + "; ".join(errors))
             next_digest = "sha256:" + hashlib.sha256(next_objective.encode("utf-8")).hexdigest()
@@ -203,6 +205,7 @@ def prepare_handoff(args: argparse.Namespace) -> int:
         if next_objective is not None:
             handoff["next_goal_objective"] = next_objective
             handoff["next_goal_hash"] = next_digest
+            handoff["next_delivery_unit"] = args.next_delivery_unit
         state["status"] = "handoff_pending"
         state["handoff"] = handoff
         metrics = state.setdefault("metrics", {})
@@ -326,6 +329,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--kind", choices=("next-goal", "continue-goal"), required=True)
     command.add_argument("--nonce")
     command.add_argument("--next-objective-file", type=Path)
+    command.add_argument("--next-delivery-unit", choices=DELIVERY_UNITS, default="bounded-deliverable")
     command.add_argument("--first-command")
     command.set_defaults(handler=prepare_handoff)
 

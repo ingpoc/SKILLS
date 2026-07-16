@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -10,7 +11,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from session_workspace import ensure_workspace, sync_program
+from entry import orchestration_action
+from session_workspace import canonical_paths, ensure_workspace, render_plan, sync_program
 
 
 HERE = Path(__file__).resolve().parent
@@ -54,10 +56,38 @@ Preserve exact goal text and avoid external effects.
 """
 
 
+def project_lifecycle_goal(profile: str = "web-release") -> str:
+    if profile == "editor-runtime":
+        lifecycle = """
+## Delivery lifecycle
+- [implementation] Scene integration: complete the accepted editor and runtime seam through the repository owner.
+- [verification] Rendered proof: exercise editor, PIE, capture, and independent visual acceptance routes.
+- [hardening] Capability packaging: encode only proven reusable friction in the correct local owner.
+"""
+    else:
+        lifecycle = """
+## Delivery lifecycle
+- [implementation] Product implementation: complete the accepted phase scope and integration seam.
+- [verification] Local proof: run the repository-owned deterministic release gate.
+- [promotion] Deployment: promote only when normal deployment authority is present.
+- [verification] Production proof: test the canonical release and repair any observed defect.
+- [handoff] Stakeholder handoff: send only with explicit external-send authority.
+"""
+    base = re.sub(r"(?ms)^## Actions\s*$\n.*?(?=^## )", "", goal())
+    return base.replace(
+        "\n## Constraints\n",
+        lifecycle + "\n## Constraints\n",
+    )
+
+
 class SessionOrchestrateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.com"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "initial", "--allow-empty"], check=True)
         self.env = {
             **os.environ,
             "SESSION_ORCHESTRATE_ROOT": str(self.root),
@@ -70,7 +100,13 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.temp.cleanup()
 
     def run_state(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run([sys.executable, str(STATE), *args], env=self.env, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, str(STATE), *args],
+            cwd=self.root,
+            env=self.env,
+            text=True,
+            capture_output=True,
+        )
         if ok and result.returncode != 0:
             self.fail(result.stderr)
         return result
@@ -107,12 +143,24 @@ class SessionOrchestrateTests(unittest.TestCase):
         path = self.root / ".session" / "CURRENT.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         saved_at = datetime.now(timezone.utc) - timedelta(hours=age_hours)
+        branch = subprocess.run(
+            ["git", "-C", str(self.root), "branch", "--show-current"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        commit = subprocess.run(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
         path.write_text(
             "# Session checkpoint\n\n"
             f"**time:** {saved_at.isoformat().replace('+00:00', 'Z')}\n"
             f"**repo_root:** {self.root}\n"
-            "**branch:** unknown\n"
-            "**last_commit:** unknown\n"
+            f"**branch:** {branch}\n"
+            f"**last_commit:** {commit}\n"
             "**resume_window_hours:** 24\n\n"
             "## codex_goal\n"
             f"resume_policy: {policy}\n"
@@ -150,7 +198,13 @@ class SessionOrchestrateTests(unittest.TestCase):
         sync_program(self.root, program)
 
     def run_entry(self, ok: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run([sys.executable, str(ENTRY)], env=self.env, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, str(ENTRY), "--root", str(self.root)],
+            cwd=self.root,
+            env=self.env,
+            text=True,
+            capture_output=True,
+        )
         if ok and result.returncode != 0:
             self.fail(result.stderr)
         if result.returncode == 0:
@@ -162,6 +216,16 @@ class SessionOrchestrateTests(unittest.TestCase):
     def test_goal_validator_accepts_session_sized_goal(self) -> None:
         result = subprocess.run([sys.executable, str(VALIDATE), str(self.write_goal())], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_orchestration_action_surfaces_selection_probe(self) -> None:
+        self.assertEqual(
+            orchestration_action(
+                "choose-next-goal",
+                "init-new-chain",
+                {"program_action": "use-plan", "selection_probe": {"target": "queue-item"}},
+            ),
+            "rerun-selection-probe",
+        )
 
     def test_goal_validator_limits_legacy_shape_to_exact_resume(self) -> None:
         legacy = goal().replace(
@@ -195,6 +259,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["mode"], "resume-exact-goal")
         self.assertEqual(output["invocation_authority"], "saved-goal-only")
         self.assertEqual(output["chain_action"], "init-new-chain")
+        self.assertEqual(output["orchestration_action"], "resume-exact-goal")
         self.assertEqual(output["exploration"]["action"], "skip")
         goal_file = Path(output["goal_file"])
         self.assertEqual(goal_file.read_text(encoding="utf-8").rstrip(), objective.rstrip())
@@ -207,6 +272,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertIn("checkpoint_missing", output["reasons"])
         self.assertEqual(output["project_inventory"]["owner_routing_candidates"], ["AGENTS.md"])
         self.assertEqual(output["workspace"]["program_action"], "rebuild-plan")
+        self.assertEqual(output["orchestration_action"], "rebuild-program-map")
         self.assertEqual(output["project_inventory"]["inventory_mode"], "cheap")
         self.assertNotIn("discovery_hints", output["project_inventory"])
         self.assertEqual(output["exploration"]["action"], "first-migration")
@@ -239,6 +305,58 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(state_result.returncode, 1)
         self.assertIn("refusing to mutate orchestration state", state_result.stderr)
 
+    def test_entry_fails_closed_outside_git_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = subprocess.run(
+                [sys.executable, str(ENTRY)],
+                cwd=root,
+                env={key: value for key, value in os.environ.items() if key != "SESSION_ORCHESTRATE_ROOT"},
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("requires invocation from a Git product repository", result.stderr)
+            self.assertFalse((root / ".session").exists())
+
+    def test_invocation_uses_current_repo_and_rejects_stale_chain_root(self) -> None:
+        other = self.root / "other-project"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        stale_env = {**os.environ, "SESSION_ORCHESTRATE_ROOT": str(self.root)}
+
+        entry = subprocess.run(
+            [sys.executable, str(ENTRY)],
+            cwd=other,
+            env=stale_env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(entry.returncode, 0, entry.stderr)
+        self.assertEqual(json.loads(entry.stdout)["project_root"], str(other.resolve()))
+        self.assertTrue((other / ".session").is_dir())
+        self.assertFalse((self.root / ".session").exists())
+
+        mismatched_entry = subprocess.run(
+            [sys.executable, str(ENTRY), "--root", str(self.root)],
+            cwd=other,
+            env=stale_env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(mismatched_entry.returncode, 1)
+        self.assertIn("explicit session-orchestrate root does not match", mismatched_entry.stderr)
+
+        state = subprocess.run(
+            [sys.executable, str(STATE), "status"],
+            cwd=other,
+            env=stale_env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(state.returncode, 1)
+        self.assertIn("does not match the current repository", state.stderr)
+
     def test_fresh_checkpoint_is_not_activated_when_program_source_changed(self) -> None:
         self.write_checkpoint("ensure-active", goal())
         (self.root / "docs" / "PRODUCTPLAN.md").write_text("# Product plan\n\nChanged current owner.\n", encoding="utf-8")
@@ -265,6 +383,62 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["chain_action"], "recover-unset-goal")
         self.assertIn("chain_goal_hash_unset_recoverable", output["reasons"])
         self.assertEqual(output["exploration"]["action"], "skip")
+
+    def test_entry_reuses_orphaned_active_chain_for_reference_only_checkpoint(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "choose-next-goal")
+        self.assertEqual(output["chain_action"], "recover-orphaned-chain")
+        self.assertEqual(output["invocation_authority"], "orphaned-chain-recovery")
+        self.assertIn("active_chain_goal_unset_recoverable", output["reasons"])
+        self.assertEqual(output["exploration"]["action"], "skip")
+        self.assertEqual(output["chain"]["recovery"], {
+            "kind": "orphaned-active-chain",
+            "next_action": "admission-probe-selected-goal",
+            "reuse_chain": True,
+            "selected_goal_delivery_unit": "bounded-deliverable",
+            "selected_goal_id": "test-goal",
+            "selected_goal_lifecycle_stages": [],
+            "set_goal_required": True,
+        })
+
+        admitted = self.write_goal()
+        self.run_state("set-goal", "--objective-file", str(admitted))
+        state = json.loads(self.run_state("status").stdout)
+        self.assertEqual(state["hop"], 1)
+        self.assertIsNotNone(state["goal_hash"])
+
+    def test_reference_only_checkpoint_does_not_replace_bound_active_goal(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        original = self.write_goal()
+        self.run_state("set-goal", "--objective-file", str(original))
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["chain_action"], "review-active-chain")
+        self.assertIsNone(output["chain"]["recovery"])
+
+        different = self.root / "different-goal.md"
+        different.write_text(goal().replace("one bounded result", "a different bounded result"), encoding="utf-8")
+        result = self.run_state("set-goal", "--objective-file", str(different), ok=False)
+        self.assertIn("already bound to a different goal", result.stderr)
+
+    def test_orphaned_chain_rebuilds_stale_policy_before_goal_admission(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        paths = canonical_paths(self.root)
+        tracking = json.loads(paths["tracking"].read_text(encoding="utf-8"))
+        tracking.pop("program_policy_version")
+        paths["tracking"].write_text(json.dumps(tracking, indent=2) + "\n", encoding="utf-8")
+        paths["plan"].write_text(render_plan(tracking), encoding="utf-8")
+
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["workspace"]["program_action"], "rebuild-plan")
+        self.assertEqual(output["chain_action"], "recover-orphaned-chain")
+        self.assertEqual(output["chain"]["recovery"]["next_action"], "rebuild-program-map")
+        self.assertEqual(output["orchestration_action"], "rebuild-program-map")
+        self.assertIsNone(output["chain"]["recovery"]["selected_goal_id"])
+        self.assertIsNone(output["chain"]["recovery"]["selected_goal_delivery_unit"])
 
     def test_entry_resumes_goal_without_reopening_stopped_chain(self) -> None:
         self.write_checkpoint("ensure-active", goal())
@@ -344,6 +518,41 @@ class SessionOrchestrateTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(VALIDATE), str(path)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn("Implementation", result.stderr)
+
+    def test_project_lifecycle_goal_accepts_project_defined_profiles(self) -> None:
+        path = self.root / "project-lifecycle-goal.md"
+        for profile in ("web-release", "editor-runtime"):
+            path.write_text(project_lifecycle_goal(profile), encoding="utf-8")
+            accepted = subprocess.run(
+                [sys.executable, str(VALIDATE), str(path), "--delivery-unit", "project-lifecycle"],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+        path.write_text(goal(), encoding="utf-8")
+        rejected = subprocess.run(
+            [sys.executable, str(VALIDATE), str(path), "--delivery-unit", "project-lifecycle"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("Delivery lifecycle", rejected.stderr)
+
+        path.write_text(
+            project_lifecycle_goal("editor-runtime").replace(
+                "- [verification] Rendered proof: exercise editor, PIE, capture, and independent visual acceptance routes.\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+        missing_proof = subprocess.run(
+            [sys.executable, str(VALIDATE), str(path), "--delivery-unit", "project-lifecycle"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(missing_proof.returncode, 1)
+        self.assertIn("requires [verification] after [implementation]", missing_proof.stderr)
 
     def test_nonce_handoff_is_single_spawn_and_claimable(self) -> None:
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")

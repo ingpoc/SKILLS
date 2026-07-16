@@ -17,10 +17,13 @@ from typing import Any, Iterator
 
 
 SCHEMA_VERSION = 1
+PROGRAM_POLICY_VERSION = 3
 SESSION_DIR = ".session"
 LEGACY_DIR = Path(".claude/session-data")
 GOAL_ID = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 GOAL_STATUSES = {"unknown", "planned", "in_progress", "blocked", "completed"}
+DELIVERY_UNITS = {"bounded-deliverable", "project-lifecycle"}
+LIFECYCLE_KINDS = {"implementation", "verification", "promotion", "handoff", "hardening"}
 FIELDS = {
     "session": None,
     "plan": "PLAN.md",
@@ -33,6 +36,17 @@ FIELDS = {
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def git_root(candidate: Path) -> Path | None:
+    result = subprocess.run(
+        ["git", "-C", str(candidate.expanduser().resolve()), "rev-parse", "--show-toplevel"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else None
 
 
 def canonical_paths(root: Path) -> dict[str, Path]:
@@ -111,12 +125,14 @@ def sha256_file(path: Path) -> str:
 def initial_tracking(root: Path, migrated: list[str]) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
+        "program_policy_version": PROGRAM_POLICY_VERSION,
         "project_root": str(root),
         "status": "needs_refresh",
         "updated_at": now(),
         "completion_gate": "",
         "phase_boundary": "",
         "selected_goal_id": None,
+        "selection_probe": None,
         "plan_sources": [],
         "goals": [],
         "migrated_from": migrated,
@@ -131,6 +147,7 @@ def render_plan(tracking: dict[str, Any]) -> str:
         "> Product intent remains owned by the repository sources listed below.",
         "",
         f"**Status:** {tracking.get('status', 'needs_refresh')}",
+        f"**Program policy:** {tracking.get('program_policy_version', 'legacy')}",
         f"**Updated:** {tracking.get('updated_at', 'unknown')}",
         f"**Phase boundary:** {tracking.get('phase_boundary') or 'not derived'}",
         f"**Selected goal:** {tracking.get('selected_goal_id') or 'none'}",
@@ -148,6 +165,18 @@ def render_plan(tracking: dict[str, Any]) -> str:
             lines.append(f"- `{source['path']}` — `{source['sha256']}`")
     else:
         lines.append("- *(none recorded)*")
+    selection = tracking.get("selection_probe")
+    lines.extend(["", "## Work selection", ""])
+    if selection:
+        lines.extend([
+            f"- Scope: `{selection['scope']}`",
+            f"- Route: {selection['route']}",
+            f"- Target: `{selection['target']}`",
+            "- Source references:",
+            *([f"  - `{item}`" for item in selection["source_refs"]] or ["  - *(none; rerun route before activation)*"]),
+        ])
+    else:
+        lines.append("- *(owner plan ordering; no repository selector declared)*")
     lines.extend(["", "## Ordered session goals", ""])
     goals = tracking.get("goals") or []
     if not goals:
@@ -158,10 +187,22 @@ def render_plan(tracking: dict[str, Any]) -> str:
             f"### [{marker}] {goal['id']} — {goal['title']}",
             "",
             f"- Status: `{goal['status']}`",
+            f"- Delivery unit: `{goal.get('delivery_unit', 'bounded-deliverable')}`",
             f"- Plan reference: {goal['plan_ref']}",
             f"- Prerequisites: {', '.join(goal['prerequisites']) or 'none'}",
-            "- Actions:",
-            *[f"  - {item}" for item in goal["actions"]],
+        ])
+        if goal.get("delivery_unit") == "project-lifecycle":
+            lines.append("- Lifecycle stages:")
+            for stage in goal["lifecycle_stages"]:
+                lines.extend([
+                    f"  - `{stage['id']}` [{stage['kind']}] {stage['title']}: {stage['action']}",
+                    f"    - Route: {stage['route']}",
+                    f"    - Acceptance: {stage['acceptance']}",
+                    f"    - Authority: {stage['authority_gate'] or 'none'}",
+                ])
+        else:
+            lines.extend(["- Actions:", *[f"  - {item}" for item in goal["actions"]]])
+        lines.extend([
             "- Verification:",
             *[f"  - {item}" for item in goal["verification"]],
             "- Evidence:",
@@ -174,14 +215,7 @@ def render_plan(tracking: dict[str, Any]) -> str:
 
 
 def add_git_exclude(root: Path) -> None:
-    result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if result.returncode != 0 or Path(result.stdout.strip()).resolve() != root:
+    if git_root(root) != root:
         return
     exclude_result = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--git-path", "info/exclude"],
@@ -244,6 +278,9 @@ def ensure_workspace(root: Path) -> dict[str, Any]:
 
 def program_staleness(root: Path, tracking: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
+    policy_current = tracking.get("program_policy_version") == PROGRAM_POLICY_VERSION
+    if not policy_current:
+        reasons.append("program_policy_changed")
     if tracking.get("status") == "needs_refresh":
         reasons.append("program_not_derived")
     for source in tracking.get("plan_sources") or []:
@@ -252,12 +289,13 @@ def program_staleness(root: Path, tracking: dict[str, Any]) -> list[str]:
             reasons.append(f"plan_source_missing:{source.get('path')}")
         elif sha256_file(path) != source.get("sha256"):
             reasons.append(f"plan_source_changed:{source.get('path')}")
-    plan = canonical_paths(root)["plan"]
-    expected = render_plan(tracking)
-    if not plan.is_file():
-        reasons.append("plan_projection_missing")
-    elif plan.read_text(encoding="utf-8") != expected:
-        reasons.append("plan_projection_modified")
+    if policy_current:
+        plan = canonical_paths(root)["plan"]
+        expected = render_plan(tracking)
+        if not plan.is_file():
+            reasons.append("plan_projection_missing")
+        elif plan.read_text(encoding="utf-8") != expected:
+            reasons.append("plan_projection_modified")
     return reasons
 
 
@@ -278,9 +316,14 @@ def workspace_status(root: Path, *, migrated: list[str] | None = None) -> dict[s
     counts: dict[str, int] = {name: 0 for name in sorted(GOAL_STATUSES)}
     for goal in tracking.get("goals") or []:
         counts[goal["status"]] += 1
+    selected_goal = next(
+        (goal for goal in tracking.get("goals") or [] if goal.get("id") == tracking.get("selected_goal_id")),
+        None,
+    )
     legacy = legacy_paths(root)
     return {
         "schema_version": SCHEMA_VERSION,
+        "program_policy_version": tracking.get("program_policy_version"),
         "project_root": str(root),
         "paths": {key: str(value) for key, value in paths.items()},
         "program_status": status,
@@ -288,6 +331,11 @@ def workspace_status(root: Path, *, migrated: list[str] | None = None) -> dict[s
         "stale": bool(stale_reasons),
         "stale_reasons": stale_reasons,
         "selected_goal_id": tracking.get("selected_goal_id"),
+        "selection_probe": tracking.get("selection_probe"),
+        "selected_goal_delivery_unit": (
+            selected_goal.get("delivery_unit", "bounded-deliverable") if selected_goal else None
+        ),
+        "selected_goal_lifecycle_stages": selected_goal.get("lifecycle_stages", []) if selected_goal else [],
         "goal_counts": counts,
         "plan_sources": tracking.get("plan_sources") or [],
         "migrated": migrated or [],
@@ -303,6 +351,89 @@ def string_list(value: Any, field: str, *, nonempty: bool = False) -> list[str]:
     return [item.strip() for item in value]
 
 
+def validate_selection_probe(raw: dict[str, Any], plan_sources: list[str]) -> dict[str, Any] | None:
+    value = raw.get("selection_probe")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("selection_probe must be an object")
+    scope = value.get("scope")
+    if scope not in {"dynamic-queue", "static-plan"}:
+        raise ValueError("selection_probe.scope must be dynamic-queue or static-plan")
+    normalized: dict[str, Any] = {"scope": scope}
+    for field in ("route", "target"):
+        field_value = value.get(field)
+        if not isinstance(field_value, str) or not field_value.strip():
+            raise ValueError(f"selection_probe.{field} must be non-empty")
+        normalized[field] = field_value.strip()
+    source_refs = string_list(value.get("source_refs", []), "selection_probe.source_refs")
+    missing = [source for source in source_refs if source not in plan_sources]
+    if missing:
+        raise ValueError(
+            "selection_probe.source_refs must also be plan_sources: " + ", ".join(missing)
+        )
+    normalized["source_refs"] = source_refs
+    return normalized
+
+
+def validate_delivery_unit(goal_id: str, raw_goal: dict[str, Any]) -> str:
+    delivery_unit = raw_goal.get("delivery_unit", "bounded-deliverable")
+    if delivery_unit not in DELIVERY_UNITS:
+        raise ValueError(f"{goal_id}.delivery_unit is invalid")
+    return delivery_unit
+
+
+def validate_lifecycle_stages(goal_id: str, raw_goal: dict[str, Any], delivery_unit: str) -> list[dict[str, str]]:
+    raw_stages = raw_goal.get("lifecycle_stages")
+    if delivery_unit == "bounded-deliverable":
+        if raw_stages is not None:
+            raise ValueError(f"{goal_id}.lifecycle_stages requires delivery_unit project-lifecycle")
+        return []
+    if not isinstance(raw_stages, list) or not 2 <= len(raw_stages) <= 8:
+        raise ValueError(f"{goal_id}.lifecycle_stages must contain 2 to 8 ordered stages")
+    stages: list[dict[str, str]] = []
+    ids: set[str] = set()
+    for index, raw_stage in enumerate(raw_stages):
+        if not isinstance(raw_stage, dict):
+            raise ValueError(f"{goal_id}.lifecycle_stages[{index}] must be an object")
+        stage_id = raw_stage.get("id")
+        kind = raw_stage.get("kind")
+        if not isinstance(stage_id, str) or not GOAL_ID.fullmatch(stage_id) or stage_id in ids:
+            raise ValueError(f"{goal_id}.lifecycle_stages[{index}].id must be unique kebab-case")
+        if kind not in LIFECYCLE_KINDS:
+            raise ValueError(f"{goal_id}.{stage_id}.kind is invalid")
+        ids.add(stage_id)
+        stage: dict[str, str] = {"id": stage_id, "kind": kind}
+        for field in ("title", "action", "route", "acceptance"):
+            value = raw_stage.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{goal_id}.{stage_id}.{field} must be non-empty")
+            stage[field] = value.strip()
+        authority = raw_stage.get("authority_gate", "")
+        if not isinstance(authority, str):
+            raise ValueError(f"{goal_id}.{stage_id}.authority_gate must be a string")
+        stage["authority_gate"] = authority.strip()
+        stages.append(stage)
+    implementation = [index for index, stage in enumerate(stages) if stage["kind"] == "implementation"]
+    verification = [index for index, stage in enumerate(stages) if stage["kind"] == "verification"]
+    if not implementation:
+        raise ValueError(f"{goal_id}.lifecycle_stages requires an implementation stage")
+    verification_after_implementation = [
+        index for index in verification if index > min(implementation)
+    ]
+    if not verification_after_implementation:
+        raise ValueError(f"{goal_id}.lifecycle_stages requires verification after implementation")
+    first_acceptance_verification = min(verification_after_implementation)
+    early_exit = [
+        stage["id"]
+        for index, stage in enumerate(stages)
+        if stage["kind"] in {"promotion", "handoff"} and index < first_acceptance_verification
+    ]
+    if early_exit:
+        raise ValueError(f"{goal_id}.lifecycle stages require verification before: {', '.join(early_exit)}")
+    return stages
+
+
 def validate_program(root: Path, raw: dict[str, Any], migrated_from: list[str]) -> dict[str, Any]:
     completion_gate = raw.get("completion_gate")
     phase_boundary = raw.get("phase_boundary")
@@ -311,6 +442,7 @@ def validate_program(root: Path, raw: dict[str, Any], migrated_from: list[str]) 
     if not isinstance(phase_boundary, str) or not phase_boundary.strip():
         raise ValueError("phase_boundary must be a non-empty string")
     source_values = string_list(raw.get("plan_sources"), "plan_sources", nonempty=True)
+    selection_probe = validate_selection_probe(raw, source_values)
     sources = []
     for value in source_values:
         candidate = Path(value)
@@ -346,17 +478,33 @@ def validate_program(root: Path, raw: dict[str, Any], migrated_from: list[str]) 
             raise ValueError(f"{goal_id}.plan_ref must be non-empty")
         if status not in GOAL_STATUSES:
             raise ValueError(f"{goal_id}.status is invalid")
+        delivery_unit = validate_delivery_unit(goal_id, raw_goal)
+        lifecycle_stages = validate_lifecycle_stages(goal_id, raw_goal, delivery_unit)
+        if delivery_unit == "project-lifecycle":
+            if raw_goal.get("actions") is not None:
+                raise ValueError(f"{goal_id}.actions must be omitted; lifecycle_stages owns lifecycle actions")
+        else:
+            actions = string_list(raw_goal.get("actions"), f"{goal_id}.actions", nonempty=True)
         goal = {
             "id": goal_id,
             "title": title.strip(),
             "status": status,
+            "delivery_unit": delivery_unit,
             "plan_ref": plan_ref.strip(),
             "prerequisites": string_list(raw_goal.get("prerequisites", []), f"{goal_id}.prerequisites"),
-            "actions": string_list(raw_goal.get("actions"), f"{goal_id}.actions", nonempty=True),
             "verification": string_list(raw_goal.get("verification"), f"{goal_id}.verification", nonempty=True),
             "evidence": string_list(raw_goal.get("evidence", []), f"{goal_id}.evidence"),
             "authority_gates": string_list(raw_goal.get("authority_gates", []), f"{goal_id}.authority_gates"),
         }
+        admission_target = raw_goal.get("admission_target")
+        if admission_target is not None:
+            if not isinstance(admission_target, str) or not admission_target.strip():
+                raise ValueError(f"{goal_id}.admission_target must be non-empty")
+            goal["admission_target"] = admission_target.strip()
+        if delivery_unit == "project-lifecycle":
+            goal["lifecycle_stages"] = lifecycle_stages
+        else:
+            goal["actions"] = actions
         if status == "completed" and not goal["evidence"]:
             raise ValueError(f"completed goal requires evidence: {goal_id}")
         goals.append(goal)
@@ -391,17 +539,28 @@ def validate_program(root: Path, raw: dict[str, Any], migrated_from: list[str]) 
     active = [goal["id"] for goal in goals if goal["status"] == "in_progress"]
     if len(active) > 1 or (active and active[0] != selected):
         raise ValueError("only selected_goal_id may be in_progress")
+    if selection_probe:
+        if selected is None:
+            raise ValueError("selection_probe requires selected_goal_id")
+        if goal_by_id[selected].get("admission_target") != selection_probe["target"]:
+            raise ValueError("selected goal admission_target does not match selection_probe.target")
+        if selection_probe["scope"] == "dynamic-queue":
+            unfinished = [goal["id"] for goal in goals if goal["status"] != "completed"]
+            if unfinished != [selected]:
+                raise ValueError("dynamic-queue programs may contain only the admitted unfinished goal")
     status = "complete" if all_complete else (
         "blocked" if selected and goal_by_id[selected]["status"] == "blocked" else "ready"
     )
     return {
         "schema_version": SCHEMA_VERSION,
+        "program_policy_version": PROGRAM_POLICY_VERSION,
         "project_root": str(root),
         "status": status,
         "updated_at": now(),
         "completion_gate": completion_gate.strip(),
         "phase_boundary": phase_boundary.strip(),
         "selected_goal_id": selected,
+        "selection_probe": selection_probe,
         "plan_sources": sources,
         "goals": goals,
         "migrated_from": migrated_from,
@@ -447,7 +606,11 @@ def mark_goal(root: Path, goal_id: str, status: str, evidence: list[str]) -> dic
         elif status == "completed" and tracking.get("selected_goal_id") == goal_id:
             tracking["selected_goal_id"] = None
         all_complete = all(item["status"] == "completed" for item in tracking["goals"])
-        if all_complete:
+        dynamic_queue = (tracking.get("selection_probe") or {}).get("scope") == "dynamic-queue"
+        if all_complete and dynamic_queue:
+            tracking["status"] = "needs_refresh"
+            tracking["selected_goal_id"] = None
+        elif all_complete:
             tracking["status"] = "complete"
             tracking["selected_goal_id"] = None
         elif tracking.get("selected_goal_id") is None:

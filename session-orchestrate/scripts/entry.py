@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import json
-import os
 import argparse
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from session_workspace import ensure_workspace
+from session_workspace import ensure_workspace, git_root
 
 
 HERE = Path(__file__).resolve().parent
@@ -26,21 +25,15 @@ EXPLORATION_CONFLICT_REASONS = {
 
 
 def project_root(explicit: Path | None = None) -> Path:
+    root = git_root(Path.cwd().resolve())
+    if root is None:
+        raise ValueError("session-orchestrate requires invocation from a Git product repository")
     if explicit:
-        root = explicit.expanduser().resolve()
-    else:
-        override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
-        if override:
-            root = Path(override).expanduser().resolve()
-        else:
-            result = subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"],
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            root = Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else Path.cwd().resolve()
+        explicit_root = git_root(explicit.expanduser().resolve())
+        if explicit_root is None:
+            raise ValueError("the explicit session-orchestrate root is not a Git repository")
+        if explicit_root != root:
+            raise ValueError("the explicit session-orchestrate root does not match the current repository")
     if root == SKILLS_REPOSITORY_ROOT:
         raise ValueError("refusing to orchestrate the global skills repository; run from the product repository or pass --root")
     return root
@@ -98,9 +91,49 @@ def chain_action(state: dict[str, Any] | None, mode: str) -> str:
         if status == "handoff_pending":
             return "claim-pending-handoff"
         return "resume-goal-chain-closed"
+    if (
+        mode == "choose-next-goal"
+        and status == "active"
+        and not state.get("goal_hash")
+        and not handoff
+    ):
+        return "recover-orphaned-chain"
     if status in {"active", "handoff_pending"}:
         return "review-active-chain"
     return "init-new-chain"
+
+
+def chain_recovery(
+    state: dict[str, Any] | None,
+    action: str,
+    workspace: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not state:
+        return None
+    handoff = state.get("handoff") or {}
+    if handoff.get("claimed_at"):
+        return {
+            "kind": handoff.get("kind"),
+            "nonce": handoff.get("nonce"),
+            "next_goal_objective": handoff.get("next_goal_objective"),
+            "first_command": handoff.get("first_command"),
+        }
+    if action == "recover-orphaned-chain":
+        rebuild = workspace.get("program_action") == "rebuild-plan"
+        return {
+            "kind": "orphaned-active-chain",
+            "selected_goal_id": None if rebuild else workspace.get("selected_goal_id"),
+            "selected_goal_delivery_unit": (
+                None if rebuild else workspace.get("selected_goal_delivery_unit")
+            ),
+            "selected_goal_lifecycle_stages": (
+                [] if rebuild else workspace.get("selected_goal_lifecycle_stages", [])
+            ),
+            "next_action": "rebuild-program-map" if rebuild else "admission-probe-selected-goal",
+            "reuse_chain": True,
+            "set_goal_required": True,
+        }
+    return None
 
 
 def downgrade(inspection: dict[str, Any], reason: str) -> None:
@@ -149,6 +182,25 @@ def exploration_route(workspace: dict[str, Any], inspection: dict[str, Any]) -> 
     }
 
 
+def orchestration_action(mode: str, chain: str, workspace: dict[str, Any]) -> str:
+    if mode == "review-checkpoint":
+        return "review-current-owner"
+    if chain == "recover-orphaned-chain":
+        return "rebuild-program-map" if workspace.get("program_action") == "rebuild-plan" else "admission-probe-selected-goal"
+    if mode == "resume-exact-goal":
+        return "resume-exact-goal"
+    program = workspace.get("program_action")
+    if program == "rebuild-plan":
+        return "rebuild-program-map"
+    if program == "product-complete":
+        return "verify-product-completion"
+    if program == "review-blocked-goal":
+        return "review-blocked-goal"
+    if workspace.get("selection_probe"):
+        return "rerun-selection-probe"
+    return "admission-probe-selected-goal"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Resolve session-orchestrate entry state")
     parser.add_argument("--root", type=Path)
@@ -187,14 +239,21 @@ def main() -> int:
             downgrade(inspection, "program_goal_blocked")
 
     mode = inspection["mode"]
+    action = chain_action(state, mode)
+    if action == "recover-orphaned-chain":
+        inspection["reasons"] = list(dict.fromkeys([
+            *(inspection.get("reasons") or []),
+            "active_chain_goal_unset_recoverable",
+        ]))
     output = {
         **inspection,
-        "invocation_authority": {
+        "invocation_authority": "orphaned-chain-recovery" if action == "recover-orphaned-chain" else {
             "resume-exact-goal": "saved-goal-only",
             "choose-next-goal": "new-bounded-chain",
             "review-checkpoint": "orchestration-only",
         }[mode],
-        "chain_action": chain_action(state, mode),
+        "chain_action": action,
+        "orchestration_action": orchestration_action(mode, action, workspace),
         "workspace": workspace,
         "project_inventory": inventory,
         "exploration": exploration_route(workspace, inspection),
@@ -206,12 +265,7 @@ def main() -> int:
             "phase_boundary": state.get("phase_boundary"),
             "stop_reason": state.get("stop_reason"),
             "goal_hash": state.get("goal_hash"),
-            "recovery": None if not (state.get("handoff") or {}).get("claimed_at") else {
-                "kind": state["handoff"].get("kind"),
-                "nonce": state["handoff"].get("nonce"),
-                "next_goal_objective": state["handoff"].get("next_goal_objective"),
-                "first_command": state["handoff"].get("first_command"),
-            },
+            "recovery": chain_recovery(state, action, workspace),
         },
     }
     print(json.dumps(output, indent=2, sort_keys=True))

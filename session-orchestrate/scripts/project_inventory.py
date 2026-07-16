@@ -32,6 +32,9 @@ PLAN_NAMES = (
     "roadmap",
     "product-roadmap",
     "product_roadmap",
+    "implementationplan",
+    "implementation-plan",
+    "implementation_plan",
 )
 STATUS_NAMES = (
     "implementation",

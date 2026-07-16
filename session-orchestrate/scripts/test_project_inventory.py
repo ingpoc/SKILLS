@@ -28,6 +28,7 @@ class ProjectInventoryTests(unittest.TestCase):
         docs.mkdir()
         (docs / "PRODUCTPLAN.md").write_text("# Product plan\n", encoding="utf-8")
         (docs / "IMPLEMENTATION_STATUS.md").write_text("# Status\n", encoding="utf-8")
+        (self.root / "IMPLEMENTATIONPLAN.md").write_text("# Build order\n", encoding="utf-8")
         generated = self.root / ".session"
         generated.mkdir()
         (generated / "IMPLEMENTATION_STATUS.md").write_text("generated state\n", encoding="utf-8")
@@ -103,6 +104,7 @@ class ProjectInventoryTests(unittest.TestCase):
         self.assertEqual(output["inventory_mode"], "cheap")
         self.assertEqual(output["owner_routing_candidates"], ["AGENTS.md"])
         self.assertIn("docs/PRODUCTPLAN.md", output["product_plan_candidates"])
+        self.assertIn("IMPLEMENTATIONPLAN.md", output["product_plan_candidates"])
         self.assertIn("docs/IMPLEMENTATION_STATUS.md", output["implementation_status_candidates"])
         self.assertNotIn(".session/IMPLEMENTATION_STATUS.md", output["implementation_status_candidates"])
         self.assertNotIn("discovery_hints", output)
