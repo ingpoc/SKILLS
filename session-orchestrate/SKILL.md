@@ -23,49 +23,24 @@ This skill reads the repository's product-plan owner, assesses implementation ag
 
 ## Main flow
 
-Resolve the caller's current Git product root first, then run `python3 ~/.codex/skills/session-orchestrate/scripts/entry.py --root "$(git rev-parse --show-toplevel)"` before broad retrieval. Fail outside Git; never reuse another project's root. The helper refuses the global skills repository, creates or validates only the current product's `.session/`, performs one-way same-root legacy migration from `.claude/session-data/` when needed, delegates checkpoint eligibility to `resume-session`, checks plan-source freshness and chain consistency, and returns a cheap owner/plan/status inventory plus `exploration.action`. Read [references/workflow.md](references/workflow.md), use deterministic owner reads first, invoke the configured read-only `explorer` sidecar only when the returned trigger still has clear ROI, rebuild only when `workspace.program_action` says so, and follow the returned mode.
+Resolve the caller's current Git product root, then run `python3 ~/.codex/skills/session-orchestrate/scripts/entry.py --compact --root "$(git rev-parse --show-toplevel)"` once. When an authorized successor prompt supplies a nonce, add `--claim-nonce <nonce>`; this mechanically claims, canonicalizes, binds, and materializes the exact objective without shell extraction. Follow `route_receipt` until one of its listed invalidators changes. Run its `reference_command` once only when present, and its `goal_detail_argv` only when the selected goal's actions or routes are needed. A claimed handoff needs neither read—use its `goal_file`, call `create_goal` with that exact objective, settle with `set-goal`, then execute `first_command`.
+
+The helper refuses the global skills repository, creates or validates only the current product's `.session/`, delegates checkpoint eligibility to `resume-session`, checks plan and chain consistency, and returns a cheap owner/status inventory. Use deterministic owner reads first, invoke a read-only explorer only when `exploration.action` still has clear ROI, and rebuild only when `workspace.program_action` says so.
+
+If a claimed handoff's owner sources changed, `revalidate-claimed-handoff` keeps its exact goal and restricts review to the changed owner slice; do not reopen broad planning or history.
 
 Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition, [scripts/validate_goal.py](scripts/validate_goal.py) before `create_goal`, and [scripts/checkpoint.py](scripts/checkpoint.py) for exact-goal closeout.
 
-## Gotchas
-
-| Failure | Control |
-|---|---|
-| A roadmap phase has several independently accepted deliverables and no shared release gate | Split by accepted deliverable; do not use a vague phase umbrella. |
-| One accepted milestone becomes tiny implementation/test/runtime/promotion/handoff goals | Derive this repository's ordered lifecycle and keep its stages in one `project-lifecycle` goal across context boundaries. Never add stages the repository does not own. |
-| A tiny goal spends a task proving work already done | Probe the current acceptance gap before goal creation. Reconcile proven items inline, select the next real gap in the same task, and create no hop for reconciliation-only work. |
-| Two tasks create the same successor | `prepare-handoff` issues one nonce and refuses another spawn while pending. |
-| A successor repeats product-plan discovery | Prepare and validate its exact next objective and first command before spawning; reuse the fresh source-fingerprinted map. |
-| Claim succeeds but the successor is interrupted before `create_goal` | The claimed handoff retains the exact objective and first command until `set-goal` settles it; reclaiming the nonce is idempotent. |
-| A legacy active hop has no goal/handoff and the checkpoint is reference-only | Reuse the hop, admission-probe the fresh selected goal, reconcile proven work inline, and bind only the first substantive goal. |
-| The helper is invoked from `~/.codex/skills` | Refuse the root before creating `.session`; rerun with the product repository root. |
-| A completed goal is recreated | Save completed goals as `reference-only`; only unfinished handoffs use `ensure-active`. |
-| A chain crosses an authority or phase gate | Stop and record the requirement instead of creating a successor. |
-| A fresh task contains an old `CURRENT.md` | `entry.py` returns `review-checkpoint`; never auto-create its saved goal. |
-| Past sessions look more complete than the repository | History and skill mentions are hints; current owners and live acceptance evidence win. |
-| A repository queue selector disagrees with the mapped goal | Reject the map. Bind only the selector's exact target; dynamic queues retain one admitted unfinished goal and refresh after completion. |
-| File or commit counts look like progress | Never manufacture a completion percentage; score only explicit, evidenced plan gates. |
-| The derived goal map becomes another product owner | `TRACKING.json` stores source hashes and evidence only; owner changes make it stale, while `PLAN.md` is a generated projection. |
-| Legacy and canonical state drift | Once `.session/` exists, every tool uses it; legacy files are retained only as non-authoritative migration evidence. |
-| The agent keeps designing after the route is known | After the map and goal pass, make the smallest concrete attempt in the next tool action. |
-| A scan sidecar costs more context than it saves | Keep history, commit, and skill mining out of the cheap path; delegate only bounded noisy discovery with a compact result contract. |
-| The runtime cannot select the configured `explorer` | Work directly for small scans or use an honestly labeled generic read-only sidecar; never claim the custom role contract or recurse through `codex exec` by default. |
-
 ## Hard rules
 
-1. **Refresh only when stale.** Always run entry and honor source fingerprints. Reuse a fresh program map; read the changed owner slice and rebuild only when stale or missing.
-2. **One task, one substantive goal.** A new goal must close a currently failing acceptance gap and produce both an implementation/runtime delta and retained evidence. Keep its exact objective stable until completion, a real blocker, or an unfinished handoff.
-3. **Two planning levels.** `.session/TRACKING.json` names all ordered remaining goals; `create_goal` receives only the selected session goal and its concrete actions.
-4. **Deterministic bounds win.** Never exceed `max_hops`, bypass a pending nonce, or replace a mechanical failure with model judgment.
-5. **Authority gates stop the chain.** Spend, deployment, external sends, destructive operations, secrets, authentication, and new product phases require their normal authority.
-6. **Same project is mandatory.** Resolve the exact project root before creating a successor.
-7. **Bounded discovery.** Read the declared route first, then minimal plan/status slices and live proof. Session history is off by default; a justified `explorer` may inspect at most three relevant sessions.
-8. **One owner per fact.** Product plan owns intended completion; `.session/TRACKING.json` owns derived cross-session progress; generated `PLAN.md` is read-only; `CURRENT.md` owns tactical handoff; `ORCHESTRATION.json` owns chain mechanics.
-9. **History is not truth.** Git history, past sessions, file presence, and prior skills may route investigation but cannot prove completion or grant authority.
-10. **Reconciliation is not a goal.** If a bounded preflight proves the candidate already complete, record the evidence and select again inline. Never initialize a chain, consume a hop, or spawn a successor solely for reconciliation.
-11. **Lifecycle stages are not goals.** A `project-lifecycle` keeps the repository-defined implementation and actual-target verification stages together, plus only the promotion, handoff, cleanup, or hardening stages this project requires. Pause the same goal at authority or context boundaries.
-12. **Project recipes stay local.** Persist every lifecycle stage's repository-owned route. After a route works, repair or create one repo-local skill only for repeated multi-step friction, evidence/cleanup duties, or safety gates; never hardcode a project's commands here or create a skill as a micro-goal.
-13. **Deterministic selectors outrank inferred ordering.** Run the repository-declared read-only next-work selector before sync and again before activation. Its exact target must match the selected goal; dynamic queues are never expanded into speculative future goals.
+1. **One substantive goal.** Split independent deliverables, but keep one accepted milestone's implementation, actual-target verification, and repository-required promotion/handoff stages in one `project-lifecycle`. Reconcile already-proven work inline without consuming a hop.
+2. **Reuse deterministic receipts.** Refresh only after a receipt invalidator changes. A selector must match the admitted goal; a dynamic queue retains only its exact unfinished target.
+3. **Preserve exact transactions.** Keep one canonical objective until completion or handoff, honor hop/nonce bounds, and create at most one same-project successor. Reclaiming the same nonce is idempotent.
+4. **Pause authority, stop phases.** Use `await-authority` for spend, deployment, sends, destructive work, secrets, or authentication. Resume the same goal only after explicit authority; never infer a new product phase.
+5. **Keep owners separate.** Product owners define completion; `TRACKING.json` derives progress, `CURRENT.md` owns tactical resume, and `ORCHESTRATION.json` owns mechanics. History and file presence are hints, not proof.
+6. **Keep recipes local.** Persist repository-owned lifecycle routes and repair/create a local skill only for proven repeated multi-step friction. Complete source changes before final proof; rerun affected evidence after any later mutation.
+7. **Bound discovery and evidence.** A justified explorer may inspect at most three sessions. Keep inline proof within the receipt budget using paths, stable ids or hashes, and concise results—never raw logs, base64, or image batches.
+8. **Avoid false blockers.** Status questions, authentication handoffs, and repair prompts are not blocker repeats. Skip broad `session-introspection` when a repository owner already provides the exact issue and next command.
 
 ## Cross-references
 
@@ -77,8 +52,4 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 - [scripts/chain_state.py](scripts/chain_state.py) — nonce-protected chain transaction state
 - [scripts/validate_goal.py](scripts/validate_goal.py) — session-goal shape and size gate
 - [scripts/checkpoint.py](scripts/checkpoint.py) — exact-goal `save-session` wrapper
-- [scripts/postcompact_nudge.py](scripts/postcompact_nudge.py) — active-chain-only fallback after automatic compaction
-- [scripts/test_project_inventory.py](scripts/test_project_inventory.py) — discovery bounds and no-session-message-echo assertions
-- [scripts/test_session_orchestrate.py](scripts/test_session_orchestrate.py) — transaction, entry, freshness, conflict, hook, and checkpoint assertions
-- [scripts/test_session_workspace.py](scripts/test_session_workspace.py) — workspace, migration, stale-source, projection, and evidence assertions
 - sibling skills: `save-session`, `resume-session`, `session-introspection`

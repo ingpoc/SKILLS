@@ -11,6 +11,7 @@ from session_workspace import (
     PROGRAM_POLICY_VERSION,
     canonical_paths,
     ensure_workspace,
+    goal_detail,
     mark_goal,
     render_plan,
     sync_program,
@@ -323,6 +324,14 @@ class SessionWorkspaceTests(unittest.TestCase):
         sync_program(self.root, self.write_program(self.program()))
         with self.assertRaisesRegex(ValueError, "goal has incomplete prerequisites"):
             mark_goal(self.root, "verification", "in_progress", [])
+
+    def test_goal_detail_returns_only_the_selected_goal_contract(self) -> None:
+        ensure_workspace(self.root)
+        sync_program(self.root, self.write_program(self.program()))
+        output = goal_detail(self.root)
+        self.assertEqual(output["goal"]["id"], "foundation")
+        self.assertEqual(output["phase_boundary"], "Phase 1")
+        self.assertNotIn("goals", output)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from session_workspace import canonical_paths
+from validate_goal import canonical_objective, objective_hash
 
 
 def resolve_command() -> str:
@@ -36,7 +37,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        objective = args.goal_file.read_text(encoding="utf-8").rstrip()
+        objective = canonical_objective(args.goal_file.read_text(encoding="utf-8"))
         command = resolve_command()
     except OSError as exc:
         print(f"checkpoint: {exc}", file=sys.stderr)
@@ -45,7 +46,7 @@ def main() -> int:
     env = {
         **os.environ,
         "SAVE_SESSION_ROOT": str(args.root.resolve()),
-        "SAVE_SESSION_GOAL_OBJECTIVE": objective,
+        "SAVE_SESSION_GOAL_OBJECTIVE": objective.rstrip(),
         "SAVE_SESSION_GOAL_RESUME_POLICY": args.resume_policy,
         "SAVE_SESSION_RESUME_WINDOW_HOURS": str(args.resume_window_hours),
         "SAVE_SESSION_HANDOFF_FOCUS": args.next_action,
@@ -67,7 +68,7 @@ def main() -> int:
     except OSError as exc:
         print(f"checkpoint: {exc}", file=sys.stderr)
         return 2
-    if f"resume_policy: {args.resume_policy}" not in saved or objective not in saved:
+    if f"resume_policy: {args.resume_policy}" not in saved or objective.rstrip() not in saved:
         print("checkpoint: exact goal or resume policy did not round-trip", file=sys.stderr)
         return 1
 
@@ -77,6 +78,7 @@ def main() -> int:
         "resume_policy": args.resume_policy,
         "resume_window_hours": args.resume_window_hours,
         "goal_chars": len(objective),
+        "goal_hash": objective_hash(objective),
     }, indent=2))
     return 0
 

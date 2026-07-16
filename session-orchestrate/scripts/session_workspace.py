@@ -10,11 +10,11 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 SCHEMA_VERSION = 1
 PROGRAM_POLICY_VERSION = 3
@@ -29,13 +29,14 @@ FIELDS = {
     "plan": "PLAN.md",
     "tracking": "TRACKING.json",
     "current": "CURRENT.md",
+    "claimed-goal": "CLAIMED_GOAL.md",
     "orchestration": "ORCHESTRATION.json",
     "orchestration-lock": "ORCHESTRATION.lock",
 }
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def git_root(candidate: Path) -> Path | None:
@@ -625,6 +626,21 @@ def mark_goal(root: Path, goal_id: str, status: str, evidence: list[str]) -> dic
     return workspace_status(root)
 
 
+def goal_detail(root: Path, goal_id: str | None = None) -> dict[str, Any]:
+    tracking = read_tracking(root.expanduser().resolve())
+    selected = goal_id or tracking.get("selected_goal_id")
+    if not selected:
+        raise ValueError("no selected goal")
+    goal = next((item for item in tracking.get("goals") or [] if item.get("id") == selected), None)
+    if goal is None:
+        raise ValueError(f"goal does not exist: {selected}")
+    return {
+        "goal": goal,
+        "selection_probe": tracking.get("selection_probe"),
+        "phase_boundary": tracking.get("phase_boundary"),
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="Manage the canonical repo-local .session workspace")
     commands = root.add_subparsers(dest="command", required=True)
@@ -642,6 +658,9 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--goal-id", required=True)
     command.add_argument("--status", choices=sorted(GOAL_STATUSES), required=True)
     command.add_argument("--evidence", action="append", default=[])
+    command = commands.add_parser("goal")
+    command.add_argument("--root", type=Path, default=Path.cwd())
+    command.add_argument("--goal-id")
     return root
 
 
@@ -659,9 +678,12 @@ def main() -> int:
         elif args.command == "sync":
             ensure_workspace(root)
             output = sync_program(root, args.program_file)
-        else:
+        elif args.command == "mark":
             ensure_workspace(root)
             output = mark_goal(root, args.goal_id, args.status, args.evidence)
+        else:
+            ensure_workspace(root)
+            output = goal_detail(root, args.goal_id)
         print(json.dumps(output, indent=2, sort_keys=True))
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:

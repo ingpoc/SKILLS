@@ -3,24 +3,29 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import hashlib
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-from session_workspace import canonical_paths, ensure_workspace, git_root
-from validate_goal import DELIVERY_UNITS, validate as validate_goal
-
+from session_workspace import atomic_text, canonical_paths, ensure_workspace, git_root
+from validate_goal import (
+    DELIVERY_UNITS,
+    canonical_objective,
+    objective_hash,
+)
+from validate_goal import (
+    validate as validate_goal,
+)
 
 SCHEMA_VERSION = 1
-ACTIVE = {"active", "handoff_pending"}
+ACTIVE = {"active", "handoff_pending", "awaiting_authority"}
 SKILLS_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 METRIC_NAMES = {
     "handoffs_prepared",
@@ -32,7 +37,7 @@ METRIC_NAMES = {
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def project_root() -> Path:
@@ -103,6 +108,54 @@ def fail(message: str) -> int:
     return 1
 
 
+def materialize_goal(objective: str) -> Path:
+    path = canonical_paths(project_root())["claimed-goal"]
+    atomic_text(path, canonical_objective(objective))
+    return path
+
+
+def claim_receipt(state: dict[str, Any], handoff: dict[str, Any], *, recovered: bool) -> dict[str, Any]:
+    objective = handoff.get("next_goal_objective") or state.get("goal_objective")
+    if not objective:
+        raise ValueError("claimed handoff has no exact goal objective")
+    goal_file = materialize_goal(objective)
+    return {
+        "chain_id": state["chain_id"],
+        "hop": state["hop"],
+        "kind": handoff["kind"],
+        "status": "active",
+        "recovered": recovered,
+        "goal_hash": state.get("goal_hash"),
+        "goal_id": state.get("goal_id"),
+        "goal_file": str(goal_file),
+        "goal_chars": len(canonical_objective(objective)),
+        "delivery_unit": handoff.get("next_delivery_unit"),
+        "first_command": handoff.get("first_command"),
+    }
+
+
+def normalize_next_goal(state: dict[str, Any], handoff: dict[str, Any]) -> None:
+    objective = handoff.get("next_goal_objective")
+    if handoff.get("kind") != "next-goal" or not objective:
+        return
+    canonical = canonical_objective(objective)
+    digest = objective_hash(canonical)
+    handoff["next_goal_objective"] = canonical
+    handoff["next_goal_hash"] = digest
+    state["goal_objective"] = canonical
+    state["goal_hash"] = digest
+    if handoff.get("next_goal_id"):
+        state["goal_id"] = handoff["next_goal_id"]
+
+
+def public_handoff(handoff: dict[str, Any]) -> dict[str, Any]:
+    receipt = {key: value for key, value in handoff.items() if key != "next_goal_objective"}
+    objective = handoff.get("next_goal_objective")
+    if objective:
+        receipt["goal_chars"] = len(canonical_objective(objective))
+    return receipt
+
+
 def init(args: argparse.Namespace) -> int:
     with locked() as (path, state):
         if state and state.get("status") in ACTIVE:
@@ -116,8 +169,11 @@ def init(args: argparse.Namespace) -> int:
             "hop": 1,
             "max_hops": args.max_hops,
             "phase_boundary": args.phase_boundary,
+            "goal_id": None,
             "goal_hash": None,
+            "goal_objective": None,
             "handoff": None,
+            "authority": None,
             "history": [],
             "metrics": {name: 0 for name in sorted(METRIC_NAMES)},
             "created_at": stamp,
@@ -139,8 +195,8 @@ def status(_: argparse.Namespace) -> int:
 
 
 def set_goal(args: argparse.Namespace) -> int:
-    objective = args.objective_file.read_text(encoding="utf-8")
-    digest = "sha256:" + hashlib.sha256(objective.encode("utf-8")).hexdigest()
+    objective = canonical_objective(args.objective_file.read_text(encoding="utf-8"))
+    digest = objective_hash(objective)
     with locked() as (path, state):
         if not state or state.get("status") != "active":
             return fail("set-goal requires an active chain")
@@ -151,12 +207,22 @@ def set_goal(args: argparse.Namespace) -> int:
                 return fail("claimed handoff goal hash mismatch")
         elif state.get("goal_hash") and state.get("goal_hash") != digest:
             return fail("active chain is already bound to a different goal")
+        if args.goal_id and state.get("goal_id") and state["goal_id"] != args.goal_id:
+            return fail("active chain is already bound to a different goal id")
+        if args.goal_id:
+            state["goal_id"] = args.goal_id
         state["goal_hash"] = digest
+        state["goal_objective"] = objective
         if handoff.get("claimed_at"):
             state["handoff"] = None
         state["updated_at"] = now()
         atomic_write(path, state)
-        return emit({"chain_id": state["chain_id"], "goal_hash": digest, "hop": state["hop"]})
+        return emit({
+            "chain_id": state["chain_id"],
+            "goal_id": state.get("goal_id"),
+            "goal_hash": digest,
+            "hop": state["hop"],
+        })
 
 
 def prepare_handoff(args: argparse.Namespace) -> int:
@@ -169,7 +235,7 @@ def prepare_handoff(args: argparse.Namespace) -> int:
             state["updated_at"] = now()
             atomic_write(path, state)
             handoff = state.get("handoff") or {}
-            return emit({**handoff, "chain_id": state["chain_id"], "spawn_allowed": False, "reason": "handoff_already_pending"})
+            return emit({**public_handoff(handoff), "chain_id": state["chain_id"], "spawn_allowed": False, "reason": "handoff_already_pending"})
         if state.get("status") != "active":
             return fail(f"chain is not active: {state.get('status')}")
         if not state.get("goal_hash"):
@@ -188,11 +254,18 @@ def prepare_handoff(args: argparse.Namespace) -> int:
         if args.kind == "next-goal":
             if not args.next_objective_file:
                 return fail("next-goal handoff requires --next-objective-file")
-            next_objective = args.next_objective_file.read_text(encoding="utf-8")
+            if not args.next_goal_id:
+                return fail("next-goal handoff requires --next-goal-id")
+            next_objective = canonical_objective(args.next_objective_file.read_text(encoding="utf-8"))
             errors = validate_goal(next_objective, delivery_unit=args.next_delivery_unit)
             if errors:
                 return fail("next goal failed admission: " + "; ".join(errors))
-            next_digest = "sha256:" + hashlib.sha256(next_objective.encode("utf-8")).hexdigest()
+            next_digest = objective_hash(next_objective)
+        elif args.kind == "continue-goal":
+            next_objective = state.get("goal_objective")
+            if not next_objective:
+                return fail("continue-goal requires the exact objective; re-run set-goal once")
+            next_digest = state.get("goal_hash") or objective_hash(next_objective)
 
         handoff = {
             "kind": args.kind,
@@ -205,14 +278,16 @@ def prepare_handoff(args: argparse.Namespace) -> int:
         if next_objective is not None:
             handoff["next_goal_objective"] = next_objective
             handoff["next_goal_hash"] = next_digest
-            handoff["next_delivery_unit"] = args.next_delivery_unit
+            if args.kind == "next-goal":
+                handoff["next_delivery_unit"] = args.next_delivery_unit
+                handoff["next_goal_id"] = args.next_goal_id
         state["status"] = "handoff_pending"
         state["handoff"] = handoff
         metrics = state.setdefault("metrics", {})
         metrics["handoffs_prepared"] = int(metrics.get("handoffs_prepared", 0)) + 1
         state["updated_at"] = now()
         atomic_write(path, state)
-        return emit({**handoff, "chain_id": state["chain_id"], "max_hops": state["max_hops"], "spawn_allowed": True})
+        return emit({**public_handoff(handoff), "chain_id": state["chain_id"], "max_hops": state["max_hops"], "spawn_allowed": True})
 
 
 def record_successor(args: argparse.Namespace) -> int:
@@ -243,16 +318,11 @@ def claim(args: argparse.Namespace) -> int:
         if state.get("status") == "active" and existing.get("claimed_at"):
             if existing.get("nonce") != args.nonce:
                 return fail("handoff nonce mismatch")
-            return emit({
-                "chain_id": state["chain_id"],
-                "hop": state["hop"],
-                "kind": existing["kind"],
-                "status": "active",
-                "recovered": True,
-                "goal_hash": state.get("goal_hash"),
-                "next_goal_objective": existing.get("next_goal_objective"),
-                "first_command": existing.get("first_command"),
-            })
+            normalize_next_goal(state, existing)
+            state["handoff"] = existing
+            state["updated_at"] = now()
+            atomic_write(path, state)
+            return emit(claim_receipt(state, existing, recovered=True))
         if state.get("status") != "handoff_pending":
             return fail("no pending handoff to claim")
         handoff = state.get("handoff") or {}
@@ -260,6 +330,7 @@ def claim(args: argparse.Namespace) -> int:
             return fail("handoff nonce mismatch")
         if not handoff.get("successor_thread_id"):
             return fail("parent has not recorded the successor thread")
+        normalize_next_goal(state, handoff)
         history_handoff = {key: value for key, value in handoff.items() if key != "next_goal_objective"}
         state.setdefault("history", []).append({
             "hop": state["hop"],
@@ -271,18 +342,77 @@ def claim(args: argparse.Namespace) -> int:
         state["status"] = "active"
         handoff["claimed_at"] = now()
         state["handoff"] = handoff
-        state["goal_hash"] = handoff.get("next_goal_hash") if handoff["kind"] == "next-goal" else state.get("goal_hash")
+        if handoff["kind"] == "next-goal":
+            normalize_next_goal(state, handoff)
+        state["updated_at"] = now()
+        atomic_write(path, state)
+        return emit(claim_receipt(state, handoff, recovered=False))
+
+
+def await_authority(args: argparse.Namespace) -> int:
+    with locked() as (path, state):
+        if not state or state.get("status") != "active":
+            return fail("await-authority requires an active chain")
+        if not state.get("goal_objective") and args.goal_file:
+            objective = canonical_objective(args.goal_file.read_text(encoding="utf-8"))
+            digest = objective_hash(objective)
+            if state.get("goal_hash") and state["goal_hash"] != digest:
+                return fail("authority goal hash mismatch")
+            state["goal_hash"] = digest
+            state["goal_objective"] = objective
+        if not state.get("goal_hash") or not state.get("goal_objective"):
+            return fail("await-authority requires an exact active goal")
+        state["status"] = "awaiting_authority"
+        state["authority"] = {
+            "reason": args.reason,
+            "next_command": args.next_command,
+            "paused_at": now(),
+        }
         state["updated_at"] = now()
         atomic_write(path, state)
         return emit({
             "chain_id": state["chain_id"],
-            "hop": state["hop"],
-            "kind": handoff["kind"],
-            "status": "active",
-            "recovered": False,
+            "status": state["status"],
+            "goal_id": state.get("goal_id"),
+            **state["authority"],
+        })
+
+
+def resume_authority(args: argparse.Namespace) -> int:
+    with locked() as (path, state):
+        if not state:
+            return fail("resume-authority requires orchestration state")
+        if state.get("status") == "awaiting_authority":
+            authority = state.get("authority") or {}
+        elif args.legacy_authority_stop and state.get("status") in {"stopped", "blocked"}:
+            if not args.goal_file:
+                return fail("legacy authority resume requires --goal-file")
+            objective = canonical_objective(args.goal_file.read_text(encoding="utf-8"))
+            digest = objective_hash(objective)
+            if state.get("goal_hash") and state["goal_hash"] != digest:
+                return fail("legacy authority goal hash mismatch")
+            state["goal_hash"] = digest
+            state["goal_objective"] = objective
+            authority = {
+                "reason": state.get("stop_reason"),
+                "paused_at": state.get("updated_at"),
+                "legacy_status": state.get("status"),
+            }
+        else:
+            return fail("resume-authority requires an authority pause")
+        authority["resumed_at"] = now()
+        authority["resume_reason"] = args.reason
+        state.setdefault("authority_history", []).append(authority)
+        state["authority"] = None
+        state["status"] = "active"
+        state["updated_at"] = now()
+        atomic_write(path, state)
+        return emit({
+            "chain_id": state["chain_id"],
+            "status": state["status"],
+            "goal_id": state.get("goal_id"),
             "goal_hash": state.get("goal_hash"),
-            "next_goal_objective": handoff.get("next_goal_objective"),
-            "first_command": handoff.get("first_command"),
+            "goal_file": str(materialize_goal(state["goal_objective"])),
         })
 
 
@@ -323,12 +453,14 @@ def parser() -> argparse.ArgumentParser:
 
     command = commands.add_parser("set-goal")
     command.add_argument("--objective-file", type=Path, required=True)
+    command.add_argument("--goal-id")
     command.set_defaults(handler=set_goal)
 
     command = commands.add_parser("prepare-handoff")
     command.add_argument("--kind", choices=("next-goal", "continue-goal"), required=True)
     command.add_argument("--nonce")
     command.add_argument("--next-objective-file", type=Path)
+    command.add_argument("--next-goal-id")
     command.add_argument("--next-delivery-unit", choices=DELIVERY_UNITS, default="bounded-deliverable")
     command.add_argument("--first-command")
     command.set_defaults(handler=prepare_handoff)
@@ -341,6 +473,18 @@ def parser() -> argparse.ArgumentParser:
     command = commands.add_parser("claim")
     command.add_argument("--nonce", required=True)
     command.set_defaults(handler=claim)
+
+    command = commands.add_parser("await-authority")
+    command.add_argument("--reason", required=True)
+    command.add_argument("--next-command", required=True)
+    command.add_argument("--goal-file", type=Path)
+    command.set_defaults(handler=await_authority)
+
+    command = commands.add_parser("resume-authority")
+    command.add_argument("--reason", required=True)
+    command.add_argument("--goal-file", type=Path)
+    command.add_argument("--legacy-authority-stop", action="store_true")
+    command.set_defaults(handler=resume_authority)
 
     command = commands.add_parser("stop")
     command.add_argument("--status", choices=("completed", "blocked", "stopped"), required=True)

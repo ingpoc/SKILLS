@@ -26,14 +26,15 @@ Lower sources never override higher sources. A commit, file, stale checkpoint, o
 
 ## Entry lane
 
-1. Resolve both roots once: `export SESSION_ORCHESTRATE_ROOT="$(git rev-parse --show-toplevel)" SESSION_ORCHESTRATE_SKILL="${CODEX_HOME:-$HOME/.codex}/skills/session-orchestrate"`. Then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/entry.py" --root "$SESSION_ORCHESTRATE_ROOT"` before broad retrieval. The explicit root must be the caller's current Git product repository; entry ignores a stale root environment value, fails outside Git, and refuses the global skills repository. It then ensures only that product's `.session/`, migrates only same-root legacy state, and returns workspace freshness, checkpoint eligibility, chain consistency, a cheap owner/plan/status inventory, `orchestration_action`, and a structured `exploration` recommendation. Treat `mode` as checkpoint eligibility and `orchestration_action` as the next orchestration behavior. The cheap path does not mine session history, commit logs, or local skills.
-2. Call `get_goal`. Preserve a matching unfinished goal. A different unfinished goal is a conflict; do not replace it.
-3. Read the narrowest routing owner from `project_inventory.owner_routing_candidates`. Follow its declared product-plan or roadmap route. Filename candidates are fallback discovery only.
-4. When `workspace.program_action` is `use-plan`, reuse the selected goal and source fingerprints; do not rebuild or repeat broad discovery. If `workspace.selection_probe` exists, rerun only that declared read-only selector and require its normalized target to match before activation. Otherwise read only the owner sections needed to identify the current phase, ordered deliverables, dependencies, and exit gate.
-5. Read the implementation/status owner when one exists. Verify disputed or missing status against live repository or runtime evidence.
-6. If the repository declares a deterministic next-work or queue selector, run it before choosing the goal. Persist its route, normalized target, and owner source references as `selection_probe`; the selected goal's `admission_target` must match. A mutable `dynamic-queue` map contains only that admitted unfinished goal and refreshes after completion instead of speculating about future queue items.
-7. Follow `workspace.program_action`: `rebuild-plan` requires a fresh sync before selecting new work; `use-plan` permits the current selected goal only after any selection probe still matches; `product-complete` requires exit-gate readback; `review-blocked-goal` stops at its recorded gate.
-8. Follow `exploration.action` below. The main agent owns the decision, validates every accepted finding against live files, and writes only normalized evidence into tracking.
+1. Resolve both roots once: `export SESSION_ORCHESTRATE_ROOT="$(git rev-parse --show-toplevel)" SESSION_ORCHESTRATE_SKILL="${CODEX_HOME:-$HOME/.codex}/skills/session-orchestrate"`. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/entry.py" --compact --root "$SESSION_ORCHESTRATE_ROOT"` once; when an authorized successor prompt supplies a nonce, add `--claim-nonce <nonce>`. The explicit root must be the caller's current Git product repository. Entry returns checkpoint eligibility, chain consistency, compact owner/status inventory, `orchestration_action`, and a stable `route_receipt`. Reuse the receipt until one of its named invalidators changes. Never pipe a goal through `jq`, command substitution, or an improvised temporary-file rewrite.
+2. If `route_receipt.reference_command` is present, run it once to read only the required workflow sections. Run `goal_detail_argv` only when the selected goal's actions or lifecycle routes are needed. Never read full workflow or tracking as a standard bookend. `execute-claimed-handoff` requires neither read: use `goal_file`, preserve its objective through `create_goal`, settle with `set-goal`, and execute `first_command`.
+3. Call `get_goal`. Preserve a matching unfinished goal. A different unfinished goal is a conflict; do not replace it.
+4. Read the narrowest routing owner from `project_inventory.owner_routing_candidates`. Follow its declared product-plan or roadmap route. Filename candidates are fallback discovery only.
+5. When `workspace.program_action` is `use-plan`, reuse the selected goal and source fingerprints; do not rebuild or repeat broad discovery. If `workspace.selection_probe` exists, rerun only that declared read-only selector and require its normalized target to match before activation. Otherwise read only the owner sections needed to identify the current phase, ordered deliverables, dependencies, and exit gate.
+6. Read the implementation/status owner when one exists. Verify disputed or missing status against live repository or runtime evidence.
+7. If the repository declares a deterministic next-work or queue selector, run it before choosing the goal. Persist its route, normalized target, and owner source references as `selection_probe`; the selected goal's `admission_target` must match. A mutable `dynamic-queue` map contains only that admitted unfinished goal and refreshes after completion instead of speculating about future queue items.
+8. Follow `workspace.program_action`: `rebuild-plan` requires a fresh sync before selecting new work; `use-plan` permits the current selected goal only after any selection probe still matches; `product-complete` requires exit-gate readback; `review-blocked-goal` stops at its recorded gate.
+9. Follow `exploration.action` below. The main agent owns the decision, validates every accepted finding against live files, and writes only normalized evidence into tracking.
 
 ### Conditional exploration
 
@@ -61,6 +62,14 @@ Collect the existing sidecar result before closing it. If a completion notificat
 Freshness is necessary, not sufficient. A product-plan change, newly completed work, a different active goal, or a new authority gate can still invalidate an otherwise fresh checkpoint.
 
 If no product/roadmap owner exists, use an explicit current user objective as the temporary completion contract. If neither exists, stop for product-owner direction; do not fabricate a roadmap from repository shape or old sessions.
+
+### Active chain review
+
+Read `goal_detail_argv`, compare `route_receipt.current_goal_id`, the selected program goal, its status, and any unfinished Codex goal. If all identities match and the acceptance gap still fails, continue the same hop; never initialize a second chain. If an older state lacks `current_goal_id`, reconcile the chain hash and selected goal once, then bind the id through `set-goal`. Stop on a genuine identity conflict.
+
+### Closed chain review
+
+Read the recorded stop reason and tactical checkpoint. Do not create a new chain while the program remains blocked or the stop reason still controls. A legacy authority stop may resume only after explicit authority and an exact goal-file hash match via `resume-authority --legacy-authority-stop`; a phase stop requires new phase authority. If the prior chain completed and the current owner permits more work, proceed through normal program-map selection.
 
 ## Build the program map
 
@@ -111,7 +120,7 @@ Do not split a deliverable into inventory, source inspection, test-writing, and 
 
 Do not report a completion percentage from file counts, commit counts, test counts, or prose checkboxes. Report a percentage only when the owner plan defines a finite acceptance-gate denominator and every completed item has evidence.
 
-Encode the map with the schema in [program-schema.md](program-schema.md), then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync --root "$SESSION_ORCHESTRATE_ROOT" --program-file <json>`. This atomically writes canonical `.session/TRACKING.json` and its generated `.session/PLAN.md` projection. Never edit `PLAN.md` directly. When an authoritative repository implementation-status owner exists, update it after verified progress as well; `.session` does not replace product-facing delivery records.
+Encode the map with the schema in [program-schema.md](program-schema.md), then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync --root "$SESSION_ORCHESTRATE_ROOT" --program-file <json>`. This atomically writes canonical `.session/TRACKING.json` and its generated `.session/PLAN.md` projection. Never edit `PLAN.md` directly. When an authoritative repository implementation-status owner exists, update it after verified progress as well; `.session` does not replace product-facing delivery records. Rerun compact entry after sync; the next receipt owns goal admission.
 
 ## Choose and start one session goal
 
@@ -132,15 +141,16 @@ Write the admitted objective to a private temporary Markdown file with:
 
 The objective should be concise and no longer than 300 words; do not pad it to meet a minimum. `Acceptance gap`, `Expected durable delta`, `Verification`, and `Stop conditions` must contain concrete list items. A bounded deliverable's `Actions` must also be concrete; a project lifecycle's structured stages own its actions, so duplicating `## Actions` is invalid. The durable delta must name both the changed implementation/runtime surface and retained acceptance evidence. For a legacy exact checkpoint, preserve its text exactly; do not rewrite it merely to adopt the newer template.
 
-Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file> --delivery-unit <selected-delivery-unit>`. For an eligible legacy checkpoint that must remain byte-for-byte exact, add `--legacy-resume`; never use that exception for a newly selected goal. After validation:
+Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file> --delivery-unit <selected-delivery-unit>`. For an eligible legacy checkpoint, add `--legacy-resume`; never use that exception for a newly selected goal. Every transaction canonicalizes trailing whitespace to one final newline, so use the same goal file rather than shell-extracting its text. After validation:
 
 1. Call `create_goal` with the exact Markdown objective, unless a matching unfinished goal already exists.
 2. Mark the selected program goal `in_progress` with `"$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" mark`.
 3. Initialize the chain with a hop budget equal to the number of substantive session goals in the current authorized phase, capped at 12: `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" init --max-hops <count> --phase-boundary "<boundary>"`. A successor claims its pending nonce instead. For `recover-orphaned-chain`, reuse the existing hop after the admission probe; do not initialize or increment the chain.
-4. Save the exact goal hash with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" set-goal --objective-file <goal-file>`.
+4. Bind the selected goal id and exact canonical objective with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" set-goal --goal-id <selected-goal-id> --objective-file <goal-file>`.
 5. Load only the owner slice and skills needed for the first action. Past skill usage is a routing hint, not a requirement to reload every prior skill.
 6. Make the smallest concrete implementation or verification attempt in the next tool action.
-7. Continue until the stop conditions pass or a real blocker/authority boundary is reached.
+7. Complete implementation and migrations before final rendered/runtime acceptance. If source changes afterward, invalidate only affected evidence and rerun it.
+8. Continue until the stop conditions pass, a true impasse occurs, or an authority/phase boundary is reached.
 
 ## Closeout lane
 
@@ -152,7 +162,7 @@ Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file> -
 4. Call `update_goal complete`.
 5. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy reference-only --next-action "<next program-map decision>" --verification "<proof summary>"`.
 6. Refresh only the implementation evidence affected by the completed goal. Rebuild the map only when an owner-source fingerprint changed; otherwise mark and select in the existing map. Run the admission probe on the next candidate. Stop when it reconciles to product/phase completion, crosses an authority boundary, or the chain reached `max_hops`.
-7. Otherwise write and validate the exact next objective, then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind next-goal --next-objective-file <next-goal-file> --next-delivery-unit <delivery-unit> --first-command "<exact first command>"`. Never spawn after reconciliation-only work.
+7. Otherwise write and validate the exact next objective, then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind next-goal --next-goal-id <next-goal-id> --next-objective-file <next-goal-file> --next-delivery-unit <delivery-unit> --first-command "<exact first command>"`. Never spawn after reconciliation-only work.
 
 ### Unfinished handoff
 
@@ -162,6 +172,15 @@ Use only after actual automatic compaction or when another task is required to f
 2. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
 3. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind continue-goal --first-command "<exact first command>"`.
 
+### Awaiting authority
+
+Use this for authentication, deployment, spend, secrets, destructive operations, or external sends that require operator authority. It is not a terminal blocker and does not justify a successor.
+
+1. Checkpoint the exact unfinished goal with `ensure-active`.
+2. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" await-authority --goal-file <goal-file> --reason "<specific gate>" --next-command "<first authorized command>"`.
+3. Stop without marking the goal or chain blocked. Status questions, authentication handoffs, and operator repair prompts do not count toward repeated-blocker thresholds.
+4. After explicit authority, run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" resume-authority --reason "<authority supplied>"`, then continue the same goal and hop from the returned `goal_file`.
+
 ### Create one successor
 
 Continue only when `prepare-handoff` returns `spawn_allowed: true`.
@@ -170,7 +189,7 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 2. Create exactly one same-project successor task.
 3. Use this prompt:
 
-   `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate and claim nonce <nonce>. The handoff contains the exact admitted goal and first command; recover them mechanically and do not rebuild a fresh program map. Revalidate only if entry reports stale sources or a conflict. Create at most one successor and stop at authority or phase boundaries.`
+   `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate with claim nonce <nonce>. Pass the nonce to entry; use its exact goal_file and first_command without plan, history, memory, or full-workflow discovery. Create at most one successor and pause the same goal at authority boundaries.`
 4. Record the task id with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
 5. End the current task. Do not continue implementation after spawning.
 
@@ -191,7 +210,7 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | Completed chain or completed active goal | Select the next current goal; never reopen it. |
 | Selected goal already passes its admission probe | Reconcile it inline and select again; do not create a goal, chain, or successor for that item. |
 | One accepted milestone is split into implementation, test/runtime proof, promotion, retest, cleanup, or handoff micro-goals | Rebuild it as one repository-defined `project-lifecycle` goal. Omit stages this project does not own; preserve authority gates and use unfinished continuation across context boundaries. |
-| Claimed handoff interrupted before goal creation | Reclaim the same nonce, recover the exact objective and first command, call `create_goal`, then settle with `set-goal`. Do not increment history twice. |
+| Claimed handoff interrupted before goal creation | Pass the same nonce to entry. Reuse `.session/CLAIMED_GOAL.md`, call `create_goal`, then settle with `set-goal`. Do not increment history twice or extract objective text through the shell. |
 | Legacy active chain has no goal hash but `CURRENT.md` has an eligible exact goal | Follow `recover-unset-goal`: create or preserve that exact goal, then settle the chain with `set-goal`; do not start another chain. |
 | Active chain has no goal or handoff and `CURRENT.md` is `reference-only` | Follow `recover-orphaned-chain`: reuse fresh tracking, admission-probe its selected goal, reconcile already-proven items inline, then bind the first substantive goal with `set-goal`. Do not initialize a chain or consume another hop. |
 | Command resolves `~/.codex/skills` as project root | Refuse without writing state; rerun from or pass the actual product root. |
@@ -208,7 +227,10 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | Sidecar reports file presence as completion | Record `present_unverified`; only accepted runtime or deterministic proof can establish `proven`. |
 | A phase repeatedly needs the same project-specific test, deploy, runtime, or recovery recipe | Prove it once, then update or create one repository-local skill and record it as the relevant lifecycle route; do not add the recipe to this global skill. |
 | A proposed local skill wraps one obvious command or duplicates a global owner | Keep the command inline or use the existing owner; do not create another surface. |
-| Remaining work crosses spend, deployment, auth, destructive, secret, external-send, or phase authority | Stop and record the specific gate. |
+| Remaining work crosses spend, deployment, auth, destructive, secret, or external-send authority | Checkpoint and use `await-authority`; resume the same goal only after explicit authority. |
+| Remaining work crosses into a new product phase | Stop the chain at the recorded phase boundary; do not infer authorization. |
+| A repository testing owner already returned an exact issue, blocker, verification state, and next command | Use that packet directly; skip broad session introspection unless uncaptured improvised recovery or repeated friction remains. |
+| Proof emits raw logs, base64, large screenshots, or repeated full files | Keep within `route_receipt.evidence_budget`; retain artifact paths, stable ids or hashes, and concise results. |
 
 ## Mechanical stop
 

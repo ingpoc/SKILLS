@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
-
 
 MAX_WORDS = 300
 LEGACY_MAX_WORDS = 450
@@ -15,6 +15,16 @@ BASE_LIST_REQUIRED = ("Scope", "Verification", "Stop conditions")
 NEW_LIST_REQUIRED = ("Acceptance gap", "Expected durable delta")
 DELIVERY_UNITS = ("bounded-deliverable", "project-lifecycle")
 LIFECYCLE_KINDS = ("implementation", "verification", "promotion", "handoff", "hardening")
+
+
+def canonical_objective(text: str) -> str:
+    """Return the byte-stable objective representation shared by every owner."""
+    return text.rstrip() + "\n"
+
+
+def objective_hash(text: str) -> str:
+    canonical = canonical_objective(text)
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def section(text: str, name: str) -> str:

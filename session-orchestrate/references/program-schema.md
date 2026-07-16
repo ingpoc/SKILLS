@@ -7,7 +7,8 @@
 | `.session/TRACKING.json` | `session_workspace.py` | Canonical derived program state, source fingerprints, ordered goals, statuses, evidence, and selected goal. |
 | `.session/PLAN.md` | generated projection | Human-readable view of `TRACKING.json`; never edit directly. |
 | `.session/CURRENT.md` | `save-session` | Exact tactical checkpoint and resumability metadata. |
-| `.session/ORCHESTRATION.json` | `chain_state.py` | Chain id, hop bounds, nonce, successor, metrics, and stop state. |
+| `.session/CLAIMED_GOAL.md` | `chain_state.py` / `entry.py` | Private canonical objective materialized for an authorized claimed handoff or authority resume. |
+| `.session/ORCHESTRATION.json` | `chain_state.py` | Chain id, exact canonical objective and hash, hop bounds, nonce, authority pause, successor, metrics, and stop state. |
 | `.session/WORKSPACE.lock` | `session_workspace.py` | Atomic program-state writes. |
 | `.session/ORCHESTRATION.lock` | `chain_state.py` | Atomic chain transitions. |
 
@@ -96,6 +97,12 @@ python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" sync \
 
 ```bash
 python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" status --root "$SESSION_ORCHESTRATE_ROOT"
+```
+
+Read only the selected goal contract when the compact entry receipt requires its actions or lifecycle routes:
+
+```bash
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" goal --root "$SESSION_ORCHESTRATE_ROOT"
 ```
 
 ## Goal tracking
