@@ -1,34 +1,28 @@
 ---
 name: determinism
-description: "Use when verifying outcomes with code instead of LLM judgment, versioning prompts with hashes, or ensuring reproducible agent behavior. Load for any critical verification. Scripts return boolean exit codes, not subjective assessments. Prompts use semantic versioning with SHA256 validation."
+description: "Design machine-checkable assertions, stable hashes, fixtures, and exit-code contracts for behavior that must be reproducible. Use when an outcome currently depends on subjective agent judgment or when prompts and generated artifacts need versioned integrity checks. Do not use merely to run an existing repository verification gate; that is verify's job."
 ---
 
 # Determinism
 
-Reproducible outcomes through code verification and prompt versioning.
+Turn a repeated judgment into an executable contract.
 
-## Core Principle
+## Procedure
 
-> "Claude can run scripts without loading either the script or the PDF into context. And because code is deterministic, this workflow is consistent and repeatable." - Anthropic Engineering
+1. Name the exact input, expected invariant, and authoritative readback.
+2. Use the simplest deterministic mechanism: parser, schema, fixture, checksum, query, or narrow test.
+3. Return a meaningful exit status: `0` for satisfied, nonzero for a specific failure class.
+4. Keep diagnostics compact and stable enough for another script or agent to consume.
+5. Version prompts or generated contracts when their semantics affect the result; record a hash when drift must be detected.
+6. Prove both a passing case and a deliberately failing case.
 
-## Instructions
+## Boundary
 
-1. Replace LLM judgment with script verification
-2. Version prompts with semantic versioning
-3. Hash-validate critical prompts: `scripts/validate-prompt.sh`
-4. Use exit codes (0 = pass, 1 = fail), not text
-
-## LLM Judgment vs Code Verification
-
-| Task | LLM (Bad) | Code (Good) |
-|------|-----------|-------------|
-| Tests passed? | "The tests appear to pass" | `pytest; echo $?` → 0 or 1 |
-| Valid JSON? | "This looks like valid JSON" | `python -c "json.load(f)"` |
-| Server running? | "The server should be up" | `curl -s localhost/health` |
+- `determinism` designs the assertion or integrity mechanism.
+- `verify` selects and runs the repository's declared gates.
+- testing skills construct broader behavioral test suites.
 
 ## References
 
-| File | Load When |
-|------|-----------|
-| references/code-verification.md | Writing verification scripts |
-| references/prompt-versioning.md | Versioning/hashing prompts |
+- [references/code-verification.md](references/code-verification.md) — executable assertion patterns.
+- [references/prompt-versioning.md](references/prompt-versioning.md) — semantic versions and hashes for prompt contracts.

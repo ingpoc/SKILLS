@@ -15,12 +15,12 @@ echo "Total @Published properties found"
 
 echo ""
 echo "3. Classes without deinit (can't verify deallocation):"
-for file in $(find . -name "*.swift" -type f); do
+find . -name "*.swift" -type f -print0 | while IFS= read -r -d '' file; do
     if grep -q "^class " "$file"; then
         if ! grep -q "deinit" "$file"; then
             echo "$file"
         fi
-    done
+    fi
 done | head -5
 
 echo ""

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-validate this skill against agentskills.io spec + project local style.
-# Uses create-skill/scripts/audit.py. Supports Codex user-level skills,
-# Claude user-level skills, and repo-local .codex/.claude skill installs.
+# Single source of truth: $CODEX_HOME/skills/create-skill/scripts/audit.py.
+# This wrapper is identical across every skill — do not customize per-skill.
 #
 # Usage:
 #   ./scripts/validate.sh              # default audit
@@ -14,43 +14,12 @@ set -eu
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_NAME="$(basename "$SKILL_DIR")"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+AUDIT="$CODEX_HOME/skills/create-skill/scripts/audit.py"
 
-find_audit_py() {
-    # 1. If this is create-skill itself, prefer the local audit.py.
-    CANDIDATE="$SKILL_DIR/scripts/audit.py"
-    if [ -f "$CANDIDATE" ]; then
-        printf '%s\n' "$CANDIDATE"
-        return 0
-    fi
-
-    # 2. Walk up looking for repo-local skill installs.
-    REPO_ROOT="$SKILL_DIR"
-    while [ "$REPO_ROOT" != "/" ]; do
-        for CANDIDATE in \
-            "$REPO_ROOT/.codex/skills/create-skill/scripts/audit.py"; do
-            if [ -f "$CANDIDATE" ]; then
-                printf '%s\n' "$CANDIDATE"
-                return 0
-            fi
-        done
-        REPO_ROOT="$(dirname "$REPO_ROOT")"
-    done
-
-    # 3. User-level skill installs.
-    for CANDIDATE in \
-        "$HOME/.codex/skills/create-skill/scripts/audit.py"; do
-        if [ -f "$CANDIDATE" ]; then
-            printf '%s\n' "$CANDIDATE"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-if ! AUDIT="$(find_audit_py)"; then
-    echo "validate.sh: could not locate create-skill audit.py from $SKILL_DIR" >&2
-    echo "  Checked local create-skill, repo-local .codex, and user-level ~/.codex/skills" >&2
+if [ ! -f "$AUDIT" ]; then
+    echo "validate.sh: could not locate create-skill from $SKILL_DIR" >&2
+    echo "  Expected: $AUDIT" >&2
     exit 2
 fi
 
@@ -60,7 +29,6 @@ EXIT=$?
 set -e
 
 if [ "$EXIT" -ne 0 ]; then
-    CREATE_SKILL_DIR="$(dirname "$(dirname "$AUDIT")")"
     cat >&2 <<EOF
 
 ────────────────────────────────────────────────────────────────────
@@ -73,10 +41,10 @@ Optimize lane:
   1. Run /create-skill and pick "Optimize" (or type "optimize $SKILL_NAME")
   2. The Optimize lane reads this audit output as input and walks you
      through the per-finding fix using:
-       $CREATE_SKILL_DIR/references/optimize.md
+       $CODEX_HOME/skills/create-skill/references/optimize.md
 
 For per-check rationale and fix recipes:
-  cat $CREATE_SKILL_DIR/references/checklist.md
+  cat $CODEX_HOME/skills/create-skill/references/checklist.md
 ────────────────────────────────────────────────────────────────────
 EOF
 fi

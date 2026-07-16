@@ -6,17 +6,17 @@ Loaded on demand when the operator picks the Audit lane (or types "audit / check
 
 ```bash
 # Single skill — pass a directory or SKILL.md path.
-python3 .codex/skills/create-skill/scripts/audit.py .codex/skills/<name>
+python3 ~/.codex/skills/create-skill/scripts/audit.py ~/.agents/skills/<name>
 
-# Repo-wide sweep — every SKILL.md under .codex/skills/.
-python3 .codex/skills/create-skill/scripts/audit.py --all
+# User-global sweep — every SKILL.md under ~/.agents/skills/.
+python3 ~/.codex/skills/create-skill/scripts/audit.py --all
 
 # Strict mode — promotes spec-soft warnings (desc > 1024, body > 5000 tokens) to hard.
 # Use before promoting a skill to cross-runtime / public consumption.
-python3 .codex/skills/create-skill/scripts/audit.py --all --strict
+python3 ~/.codex/skills/create-skill/scripts/audit.py --all --strict
 
 # Machine-readable output for downstream tooling.
-python3 .codex/skills/create-skill/scripts/audit.py --all --json
+python3 ~/.codex/skills/create-skill/scripts/audit.py --all --json
 ```
 
 ## Output format
@@ -38,7 +38,7 @@ For per-check rationale and finding → fix mapping, see [checklist.md](checklis
 {
   "reports": [
     {
-      "path": ".codex/skills/foo/SKILL.md",
+      "path": ".agents/skills/foo/SKILL.md",
       "name": "foo",
       "hard_findings": 0,
       "soft_findings": 2,
@@ -77,7 +77,7 @@ Awareness of audit's blind spots — these need operator judgment:
 - **Description quality** beyond trigger-phrase presence. A vague-but-trigger-rich description still passes `description_has_triggers`.
 - **Body coherence.** A body can be the right size and still be unreadable.
 - **Whether scripts actually work.** Audit checks `scripts/*.py` exists, not that it runs.
-- **Duplicate or overlapping skills.** Use the user-global `skill-portfolio-review` for that.
+- **Duplicate or overlapping skills.** Use `context-efficiency-audit`; its portfolio scan owns stale and competing trigger routes.
 - **Cross-skill dependency drift.** If skill A links to skill B and B gets renamed, audit on A reports a dangling link but doesn't propose the rename source.
 
 For these, lean on operator judgment in the Optimize lane's "confirm scope" preflight.

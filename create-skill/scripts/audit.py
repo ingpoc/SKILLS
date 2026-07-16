@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Audit a `.codex/skills/<name>/SKILL.md` against agentskills.io spec + local style.
+"""Audit a SKILL.md against the current local Codex schema and style.
 
 Usage:
     audit.py PATH [PATH ...]   # one or more SKILL.md files or skill dirs
-    audit.py --all             # all skills under .codex/skills/
+    audit.py --all             # all skills under ~/.agents/skills/
     audit.py --json            # machine-readable
     audit.py --strict          # treat spec-soft warnings as hard
 
@@ -29,6 +29,7 @@ DESC_HARD_MAX = 8000          # sanity guardrail — beyond this, activation cos
 BODY_TOKENS_SOFT_MAX = 5000   # spec recommendation
 BODY_TOKENS_HARD_MAX = 15000  # sanity guardrail
 CHARS_PER_TOKEN = 4           # rough estimate; tiktoken not assumed present
+ALLOWED_FRONTMATTER = {"name", "description", "license", "allowed-tools", "metadata"}
 
 
 # --- model ----------------------------------------------------------------
@@ -149,6 +150,15 @@ def check_skill(skill_md: Path, strict: bool) -> SkillReport:
         rep.hard_findings = 1
         return rep
     rep.checks.append(Finding("frontmatter_present", "hard", "pass", "frontmatter parsed"))
+
+    unexpected = sorted(set(fm) - ALLOWED_FRONTMATTER)
+    if unexpected:
+        rep.checks.append(Finding(
+            "frontmatter_schema", "hard", "fail",
+            "unsupported keys: " + ", ".join(unexpected),
+        ))
+    else:
+        rep.checks.append(Finding("frontmatter_schema", "hard", "pass", "supported keys only"))
 
     # name
     name = fm.get("name", "").strip()
@@ -335,9 +345,13 @@ def check_progressive_disclosure(body: str, body_tokens: int) -> Finding:
 
 
 def _repo_root_for(skill_dir: Path) -> Path | None:
-    """Walk up from skill_dir looking for the repo root (`.claude` parent)."""
+    """Walk up from a skill directory to the nearest repository owner."""
     for parent in skill_dir.parents:
-        if (parent / ".claude").is_dir() and parent != skill_dir:
+        if parent != skill_dir and (
+            (parent / ".git").exists()
+            or (parent / "AGENTS.md").is_file()
+            or (parent / ".agents").is_dir()
+        ):
             return parent
     return None
 
@@ -402,8 +416,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*")
     ap.add_argument("--all", action="store_true", help="audit every skill under --skills-root")
-    ap.add_argument("--skills-root", default=".claude/skills",
-                    help="root directory when --all is used (default: .claude/skills)")
+    ap.add_argument("--skills-root", default=str(Path.home() / ".agents" / "skills"),
+                    help="root directory when --all is used (default: ~/.agents/skills)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true",
                     help="treat spec-soft warnings as hard (e.g., description > 1024 chars)")

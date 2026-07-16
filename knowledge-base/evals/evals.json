@@ -1,0 +1,86 @@
+{
+  "skill_name": "knowledge-base",
+  "description": "Test prompts covering the nine operations of the knowledge-base skill. Each prompt should route to its named operation and produce schema-valid KB output.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "refresh-routine",
+      "operation": "REFRESH",
+      "prompt": "Refresh the Claude tooling KB — has anything new shipped since last week?",
+      "expected_output": "Skill invokes Phase A state-tracker; if delta empty, reports 'no upstream changes since last refresh'; if non-empty, proceeds to Phase B with candidate list and writes gap articles via parallel Haiku subagents.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "maintain-url-validity",
+      "operation": "MAINTAIN",
+      "prompt": "Audit the KB URLs for staleness — re-verify the SDK feature pages still resolve.",
+      "expected_output": "Skill runs M1 (URL validity) across articles tagged agents/coding-agents written in last 90 days; reports 200/404 per article; flags articles where source_url 404s and updates ## Maintenance note (does NOT delete articles).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "ingest-user-draft",
+      "operation": "INGEST",
+      "prompt": "I have a draft article on the new Codex MCP support at /tmp/codex-mcp-draft.md — please ingest it into the KB with appropriate tags.",
+      "expected_output": "Skill runs I1 (lint), I2 (dedupe check), I3 (ingest with frontmatter tags). If lint fails, surfaces specific frontmatter errors. If duplicate-suspect, asks user before ingest. Updates codex-sdk-rubric to add row.",
+      "files": ["/tmp/codex-mcp-draft.md"]
+    },
+    {
+      "id": 4,
+      "name": "audit-full-coverage",
+      "operation": "AUDIT",
+      "prompt": "Is our KB current across all four surfaces? Do a full coverage check, no delta gate.",
+      "expected_output": "Skill runs REFRESH workflow without delta gate. Every feature on references/surface-urls.md becomes a candidate. Output is coverage matrix (covered vs gap) per surface, then Phase B writes new gap articles.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "search-with-query-expansion",
+      "operation": "SEARCH",
+      "prompt": "What do we know in the KB about preventing parallel tool calls in subagents?",
+      "expected_output": "Skill runs S1 (smart query) → returns can_use_tool article, AgentDefinition.maxTurns article, per-phase allowed_tools article. Top result is can_use_tool with score in range (-5, -10).",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "dedupe-overlap-check",
+      "operation": "DEDUPE",
+      "prompt": "Find any overlapping articles in the Claude Agent SDK section — are there duplicates I should merge?",
+      "expected_output": "Skill runs D1 (title-token overlap analysis on agent-sdk-tagged articles). Flags pairs with >50% overlap. User-facing summary lists candidate pairs for review with merge/keep-both/supersede options.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "rubric-edit",
+      "operation": "RUBRIC OPS",
+      "prompt": "Update the Codex SDK rubric — I just ingested an article on `codex exec` that needs to appear in the rubric table.",
+      "expected_output": "Skill runs R1 (read codex-sdk-rubric to /tmp/), R2 (locate appropriate table, append row with article slug + docs URL), R3 (re-ingest preserving short title). Verify post-ingest read returns updated content.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "trigger-monthly-cadence",
+      "operation": "REFRESH",
+      "prompt": "It's been a month since the last KB refresh — run the routine.",
+      "expected_output": "Same as eval 1; skill should trigger on the cadence framing alone, even without explicit 'refresh the KB' wording.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "learning-from-validated-session-friction",
+      "operation": "LEARNING",
+      "prompt": "$knowledge-base learning — encode the non-obvious, reusable lessons from this session for agents doing similar work.",
+      "expected_output": "Skill mines the active session, applies all five learning gates, performs two novelty searches per candidate, distinguishes upstream facts from live session evidence, writes atomic 200–400 word drafts, strict-lints and ingests only passing articles, rebuilds the browser, and verifies likely stuck-agent queries return each article in the top three.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "learning-clean-no-op",
+      "operation": "LEARNING",
+      "prompt": "$knowledge-base learning — this session completed cleanly using already-documented steps; capture only genuinely novel lessons.",
+      "expected_output": "Skill rejects generic, already-documented, or unevidenced candidates and reports a clean zero-article no-op instead of manufacturing a lesson.",
+      "files": []
+    }
+  ]
+}

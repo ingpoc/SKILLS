@@ -1,120 +1,31 @@
 ---
 name: verify
-description: Run structured quality gate against current project. Use for /verify, "verify the build", "run quality checks". NOT for eval scoring (/eval-score) or auditing (/audit).
-model: haiku
-effort: low
-allowed-tools: Read, Bash, Glob, Grep
+description: "Dispatch repository verification through the narrowest declared validation owner and return one evidence-backed readiness verdict. Use when the operator asks to verify a build, run quality checks, validate current changes, or decide whether work is ready. Do not invent generic commands when AGENTS.md, package scripts, a phase gate, or a specialist skill already owns validation."
+allowed-tools: Bash Read
 ---
 
-# Verify: Run Quality Gate
+# Verify
 
-**EXECUTE this skill now.** Follow the workflow steps below using the provided $ARGUMENTS. Do NOT describe, summarize, or explain this skill — run it.
+This skill coordinates verification; it does not own project-specific commands.
 
-## Arguments
+## Procedure
 
-- (none) — runs `standard` mode (phases 1-5)
-- `quick` — phases 1-3 only (build, types, lint)
-- `full` — all 6 phases
-- `pre-commit` — phases 1-4 (build, types, lint, tests)
-- `pre-pr` — all 6 phases with stricter thresholds
+1. Read the narrowest applicable `AGENTS.md` validation section and any route it explicitly names.
+2. Prefer, in order: a repo-declared phase gate, a repo validation script, package-manager scripts, then a narrowly inferred command only when no owner exists.
+3. Run the smallest gate that covers the changed surface. Expand only after a failure or when the operator requests full verification.
+4. Capture the command, exit status, relevant counts, and first actionable failure. Do not dump full logs.
+5. For rendered UI, deployment, database, provider, or security work, invoke the matching specialist skill instead of approximating its proof.
 
-## Workflow
+## Verdict
 
-### Step 0: Detect Stack
+Return:
 
-Check for:
-- `package.json` → Node/TypeScript stack
-- `pyproject.toml` or `requirements.txt` → Python stack
-- `Cargo.toml` → Rust stack
-- `go.mod` → Go stack
+- `READY` only when every required owner gate passed;
+- `NOT READY` when a required gate failed;
+- `UNVERIFIED` when the owning gate is unavailable or requires authority not granted.
 
-Use the detected stack to select the right commands below.
+Name skipped gates and why. A successful build alone does not prove rendered behavior, deployment state, persistence, authorization, or customer value.
 
-### Phase 1: Build
+## Boundary
 
-| Stack | Command |
-|-------|---------|
-| Node/TS | `npm run build` or `tsc --noEmit` |
-| Python | `python -m py_compile $(find . -name "*.py" -not -path "*/.*")` |
-| Rust | `cargo build` |
-| Go | `go build ./...` |
-
-Result: PASS / FAIL (capture first 20 lines of errors if FAIL)
-
-### Phase 2: Type Check
-
-| Stack | Command |
-|-------|---------|
-| Node/TS | `tsc --noEmit` (skip if no tsconfig.json) |
-| Python | `pyright .` or `mypy .` (skip if neither installed) |
-| Rust | included in Phase 1 |
-| Go | included in Phase 1 |
-
-Result: PASS / SKIP / FAIL
-
-### Phase 3: Lint
-
-| Stack | Command |
-|-------|---------|
-| Node/TS | `npx eslint . --max-warnings 0` or `npx biome check .` |
-| Python | `ruff check .` or `flake8` |
-| Rust | `cargo clippy -- -D warnings` |
-| Go | `golangci-lint run` (skip if not installed) |
-
-Result: PASS / SKIP / FAIL (capture warning/error count)
-
-### Phase 4: Tests
-
-| Stack | Command |
-|-------|---------|
-| Node/TS | `npm test` or `npx jest --passWithNoTests` |
-| Python | `pytest` or `python -m pytest` |
-| Rust | `cargo test` |
-| Go | `go test ./...` |
-
-Result: PASS / FAIL (capture test count and failures)
-
-### Phase 5: Security Scan
-
-Check for common issues without external tools:
-```bash
-# Check for secrets patterns
-grep -r --include="*.ts" --include="*.js" --include="*.py" \
-  -E "(password|secret|api_key|apikey|token)\s*=\s*['\"][^'\"]{8,}" \
-  . --exclude-dir=node_modules --exclude-dir=.git -l 2>/dev/null
-```
-Also check: no `console.log` in production paths (TS/JS), no bare `print()` debugging (Python).
-
-Result: PASS / WARN (list files with findings)
-
-### Phase 6: Diff Review (full / pre-pr only)
-
-```bash
-git diff --stat HEAD
-git diff --name-only HEAD
-```
-
-Report: files changed, insertions, deletions. Flag files > 500 lines changed as "large diff".
-
-Result: INFO (no pass/fail)
-
-### Final Report
-
-```
-## Verification Report — <project> (<mode>)
-
-| Phase | Result | Details |
-|-------|--------|---------|
-| 1. Build | ✓ PASS / ✗ FAIL | <brief> |
-| 2. Type Check | ✓ PASS / — SKIP | |
-| 3. Lint | ✓ PASS / ✗ FAIL | <N warnings> |
-| 4. Tests | ✓ PASS / ✗ FAIL | <N passed, N failed> |
-| 5. Security | ✓ PASS / ⚠ WARN | <files with findings> |
-| 6. Diff | — INFO | <N files, +N -N lines> |
-
-**Verdict: READY / NOT READY**
-
-<If NOT READY: list blocking issues in priority order>
-```
-
-Stop after the first FAIL in phases 1-2 (build/types must pass before other checks are meaningful). Continue through all phases for phases 3-6.
+`verify` owns orchestration and reporting. Repository instructions and specialist skills own the actual acceptance criteria and commands.

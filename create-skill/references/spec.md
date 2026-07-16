@@ -5,7 +5,7 @@ Canonical contract from [agentskills.io/specification](https://agentskills.io/sp
 ## Directory layout
 
 ```
-.codex/skills/<name>/
+.agents/skills/<name>/
 ├── SKILL.md          # REQUIRED — frontmatter + body
 ├── scripts/          # optional — deterministic executables (Python, Bash, etc.)
 ├── references/       # optional — deeper docs the body links to
@@ -23,17 +23,11 @@ Only `SKILL.md` is required. Everything else loads on demand per progressive dis
 | `description` | yes | string | Per spec: ≤ 1024 chars. **This repo permits longer for activation precision** — see [description.md](description.md). |
 | `allowed-tools` | no | string or list | Whitelist of tools the skill may invoke. Space-separated string OR YAML list. Omit when the skill is pure guidance. Constrain to the minimum surface. |
 | `license` | no | string | SPDX identifier. Optional. |
-| `compatibility` | no | string or list | Free-text or list of runtime / dependency constraints. |
 | `metadata` | no | mapping | Free-form. Common keys: `author`, `version`. |
 
-Project-specific extensions seen in this repo (not in the agentskills.io spec, but consumed by Claude Agent SDK runtime configuration):
-
-| Field | Type | Effect |
-|---|---|---|
-| `model` | string | Override default model for the skill (`sonnet`, `haiku`, `opus`). |
-| `effort` | string | Reasoning effort hint (`low`, `medium`, `high`). |
-
-These are tolerated by `scripts/audit.py` but not validated against an enum.
+Invocation policy and tool dependencies belong in `agents/openai.yaml`, not in
+custom `SKILL.md` frontmatter keys. The current local Codex validator accepts
+only `name`, `description`, `license`, `allowed-tools`, and `metadata`.
 
 ## Name validation
 
@@ -70,7 +64,7 @@ Skills are loaded incrementally to keep agent context small:
 
 | Stage | What loads | Budget | Audited as |
 |---|---|---|---|
-| **Discovery** | `name` + `description` only, for every skill in the registry | ~100 tokens per skill | `description_length` |
+| **Discovery** | `name` + `description` only, for every skill in the registry | shared initial-list budget; keep descriptions concise | `description_length` |
 | **Activation** | The full `SKILL.md` body, when description matches operator intent | ≤ 5000 tokens recommended; ≤ 15000 sanity ceiling | `body_token_budget` |
 | **Execution** | Scripts, references, assets — loaded only when the body explicitly invokes them | unbounded (loaded sparingly) | n/a |
 

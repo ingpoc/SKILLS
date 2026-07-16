@@ -4,7 +4,7 @@ Loaded on demand when the operator picks the Optimize lane (or types "optimize /
 
 ## Preflight
 
-1. **Audit first** — `python3 .codex/skills/create-skill/scripts/audit.py <skill>`. **Never edit blind.** The audit JSON is the input to this lane.
+1. **Audit first** — `python3 ~/.codex/skills/create-skill/scripts/audit.py <skill>`. **Never edit blind.** The audit JSON is the input to this lane.
 2. **Identify the dominant failure class** from the findings. See [checklist.md](checklist.md) for severity → fix mapping.
 3. **Confirm scope with the operator** if the fix would change observable behavior (a description rewrite that narrows activation; a body restructure that moves anchors other docs link to).
 
@@ -30,7 +30,7 @@ Loaded on demand when the operator picks the Optimize lane (or types "optimize /
 
 ```bash
 # Re-audit — must come back cleaner than before.
-python3 .codex/skills/create-skill/scripts/audit.py <skill-path>
+python3 ~/.codex/skills/create-skill/scripts/audit.py <skill-path>
 
 # Diff the before/after finding counts and report to the operator.
 ```
@@ -63,7 +63,7 @@ After every fix: re-run audit. Each finding count should drop.
 
 The Audit lane found `hallmark` failing `body_token_budget` (~15.7k tokens > 15k sanity ceiling). Optimize lane procedure:
 
-1. Read `.codex/skills/hallmark/SKILL.md` to understand the lane structure.
+1. Read the target `SKILL.md` to understand its lane structure.
 2. Group body content by phase / lane / topic.
 3. For each group, create `references/<topic>.md` and move content verbatim.
 4. Replace the body section with a one-line summary + link to the new reference file.

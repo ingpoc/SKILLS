@@ -35,7 +35,7 @@
 {
   "reports": [
     {
-      "path": ".codex/skills/foo/SKILL.md",
+      "path": ".agents/skills/foo/SKILL.md",
       "name": "foo",
       "hard_findings": 1,
       "soft_findings": 2,
@@ -73,7 +73,7 @@ Awareness of audit's blind spots:
 - **Description quality** beyond the trigger-phrase heuristic. Vague-but-trigger-rich descriptions still pass `description_has_triggers` — operator judgment required.
 - **Body coherence.** A body can be the right size and still be unreadable garbage.
 - **Whether scripts actually work.** `audit.py` checks they exist, not that they run.
-- **Whether the skill duplicates an existing skill.** Use `skill-portfolio-review` (user-global) for that.
+- **Whether the skill duplicates an existing skill.** Use `context-efficiency-audit`, which owns portfolio-level stale and competing routes.
 - **Cross-skill dependencies.** If skill A links to skill B and skill B gets renamed, audit on skill A reports the dangling link but doesn't suggest the rename source.
 
 For these, lean on the operator's judgment and the optimize lane's "confirm scope with operator" preflight.

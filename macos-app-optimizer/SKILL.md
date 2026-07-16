@@ -1,7 +1,6 @@
 ---
 name: macos-app-optimizer
-description: "Use when analyzing macOS apps for optimization opportunities, improving memory/RAM usage, reducing memory leaks, optimizing SwiftUI performance, or analyzing Swift code for efficiency. Load for any macOS app performance analysis or memory optimization task."
-keywords: [macos, optimization, memory, ram, swiftui, performance, profiling, leaks, swift, appkit]
+description: "Audit native macOS, AppKit, and SwiftUI applications for memory ownership, ARC cycles, rendering cost, heap growth, and profiling evidence. Use when the operator asks to diagnose or optimize a macOS application's runtime performance. Do not use for generic code quality or non-Apple web performance."
 ---
 
 # macOS App Optimizer

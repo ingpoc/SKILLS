@@ -55,7 +55,7 @@ Before writing the description, list:
 |---|---|
 | **What the operator literally types** | "create a skill for X", "new skill", "scaffold a skill", "add a SKILL.md" |
 | **Adjacent verbs they might use** | "set up", "register", "build", "make", "author" |
-| **What they call the artifact** | "skill", "SKILL.md", ".claude/skills entry", "command", "tool" |
+| **What they call the artifact** | "skill", "SKILL.md", ".agents/skills entry", "command", "tool" |
 | **What they're trying to accomplish (no jargon)** | "automate a thing I keep doing", "package this workflow", "save this as a reusable command" |
 | **Negation / proxy phrases** | "this would be useful as a skill", "could we turn this into a skill?" |
 
