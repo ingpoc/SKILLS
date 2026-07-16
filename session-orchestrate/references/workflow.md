@@ -39,13 +39,13 @@ Lower sources never override higher sources. A commit, file, stale checkpoint, o
 | Action | Meaning | Main-agent decision |
 |---|---|---|
 | `skip` | Program state is fresh, blocked, complete, or otherwise answerable through narrow deterministic reads | Do not spawn a scanner. |
-| `first-migration` | No source-backed program map exists yet | Use `cost_scan` only when owner plus implementation state is broader than one or two deterministic reads. |
+| `first-migration` | No source-backed program map exists yet | Use `explorer` only when owner plus implementation state is broader than one or two deterministic reads. |
 | `stale-rebuild` | A source fingerprint or generated projection invalidated an existing map | Read the changed owner slice first; delegate only when rebuilding requires a broad implementation-state comparison. |
 | `conflict` | Checkpoint, chain, or program state contradicts another mechanical owner | Use a sidecar only for separable evidence gathering; keep conflict resolution and goal choice on the main thread. |
 
-When delegation is justified, request the custom `cost_scan` role. Its TOML owns model, reasoning, and read-only sandbox settings; do not duplicate those values here. Pass only the task-specific owner paths, exclusions, bounds, and exact deliverable. Require compact scan metrics, three to seven findings, duplicate findings, unknowns, and evidence references. Session history remains off unless explicitly needed and is capped at three relevant sessions.
+When delegation is justified, request the configured `explorer` role. Its TOML owns the read-only sandbox and compact-output contract while model and reasoning remain runtime-selected. Pass only the task-specific owner paths, exclusions, bounds, and exact deliverable. Require compact scan metrics, three to seven findings, duplicate findings, unknowns, and evidence references. Session history remains off unless explicitly needed and is capped at three relevant sessions.
 
-If the callable spawn surface cannot select `cost_scan`, do not claim its configured model was used. Work directly when the scan is small. A built-in read-only explorer is an honest fallback only when context isolation still has measured value. Do not launch recursive `codex exec` as an automatic fallback.
+If the callable spawn surface cannot select the configured `explorer`, do not claim its role contract was used. Work directly when the scan is small. An honestly labeled generic read-only sidecar is acceptable only when context isolation still has measured value. Do not launch recursive `codex exec` as an automatic fallback.
 
 Collect the existing sidecar result before closing it. If a completion notification loses the payload, inspect or recover that agent result before retrying; never repeat a broad scan by default. Persist only main-agent-validated states (`proven`, `present_unverified`, `absent`, or `unknown`) and evidence references, never the raw transcript.
 
@@ -142,7 +142,6 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 3. Use this prompt:
 
    `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate and claim nonce <nonce>. The handoff contains the exact admitted goal and first command; recover them mechanically and do not rebuild a fresh program map. Revalidate only if entry reports stale sources or a conflict. Create at most one successor and stop at authority or phase boundaries.`
-
 4. Record the task id with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
 5. End the current task. Do not continue implementation after spawning.
 
@@ -168,7 +167,7 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | Product plan exists but status is unclear | Verify live evidence and mark unknown, not complete. |
 | No product plan and no explicit product objective | Stop for product-owner direction. |
 | Past sessions disagree with current owner docs | Current owner docs and live evidence win. |
-| `cost_scan` is unavailable on the callable spawn surface | Work directly or use an honestly labeled built-in read-only explorer only when it still has clear ROI. |
+| Configured `explorer` is unavailable on the callable spawn surface | Work directly or use an honestly labeled generic read-only sidecar only when it still has clear ROI. |
 | Sidecar result notification lacks its payload | Recover the existing result before considering a retry; do not repeat the broad scan automatically. |
 | Sidecar reports file presence as completion | Record `present_unverified`; only accepted runtime or deterministic proof can establish `proven`. |
 | Remaining work crosses spend, deployment, auth, destructive, secret, external-send, or phase authority | Stop and record the specific gate. |

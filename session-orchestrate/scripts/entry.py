@@ -136,8 +136,8 @@ def exploration_route(workspace: dict[str, Any], inspection: dict[str, Any]) -> 
         "action": action,
         "reason": reason,
         "decision_owner": "main-agent",
-        "agent_type": "cost_scan",
-        "agent_config_owner": "~/.codex/agents/cost-scan.toml",
+        "agent_type": "explorer",
+        "agent_config_owner": "~/.codex/agents/explorer.toml",
         "spawn_policy": "conditional",
         "constraints": [
             "read-only",

@@ -23,7 +23,7 @@ This skill reads the repository's product-plan owner, assesses implementation ag
 
 ## Main flow
 
-Resolve the product root first, then run `python3 ~/.codex/skills/session-orchestrate/scripts/entry.py --root "$(git rev-parse --show-toplevel)"` before broad retrieval. The helper refuses the global skills repository, creates or validates the product's `.session/`, performs one-way legacy migration from `.claude/session-data/` when needed, delegates checkpoint eligibility to `resume-session`, checks plan-source freshness and chain consistency, and returns a cheap owner/plan/status inventory plus `exploration.action`. Read [references/workflow.md](references/workflow.md), use deterministic owner reads first, invoke the configured read-only `cost_scan` sidecar only when the returned trigger still has clear ROI, rebuild only when `workspace.program_action` says so, and follow the returned mode.
+Resolve the product root first, then run `python3 ~/.codex/skills/session-orchestrate/scripts/entry.py --root "$(git rev-parse --show-toplevel)"` before broad retrieval. The helper refuses the global skills repository, creates or validates the product's `.session/`, performs one-way legacy migration from `.claude/session-data/` when needed, delegates checkpoint eligibility to `resume-session`, checks plan-source freshness and chain consistency, and returns a cheap owner/plan/status inventory plus `exploration.action`. Read [references/workflow.md](references/workflow.md), use deterministic owner reads first, invoke the configured read-only `explorer` sidecar only when the returned trigger still has clear ROI, rebuild only when `workspace.program_action` says so, and follow the returned mode.
 
 Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition, [scripts/validate_goal.py](scripts/validate_goal.py) before `create_goal`, and [scripts/checkpoint.py](scripts/checkpoint.py) for exact-goal closeout.
 
@@ -46,7 +46,7 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 | Legacy and canonical state drift | Once `.session/` exists, every tool uses it; legacy files are retained only as non-authoritative migration evidence. |
 | The agent keeps designing after the route is known | After the map and goal pass, make the smallest concrete attempt in the next tool action. |
 | A scan sidecar costs more context than it saves | Keep history, commit, and skill mining out of the cheap path; delegate only bounded noisy discovery with a compact result contract. |
-| The runtime cannot select `cost_scan` | Work directly for small scans or use an honestly labeled built-in read-only explorer; never claim the custom model pin or recurse through `codex exec` by default. |
+| The runtime cannot select the configured `explorer` | Work directly for small scans or use an honestly labeled generic read-only sidecar; never claim the custom role contract or recurse through `codex exec` by default. |
 
 ## Hard rules
 
@@ -56,7 +56,7 @@ Use [scripts/chain_state.py](scripts/chain_state.py) for every state transition,
 4. **Deterministic bounds win.** Never exceed `max_hops`, bypass a pending nonce, or replace a mechanical failure with model judgment.
 5. **Authority gates stop the chain.** Spend, deployment, external sends, destructive operations, secrets, authentication, and new product phases require their normal authority.
 6. **Same project is mandatory.** Resolve the exact project root before creating a successor.
-7. **Bounded discovery.** Read the declared route first, then minimal plan/status slices and live proof. Session history is off by default; a justified `cost_scan` may inspect at most three relevant sessions.
+7. **Bounded discovery.** Read the declared route first, then minimal plan/status slices and live proof. Session history is off by default; a justified `explorer` may inspect at most three relevant sessions.
 8. **One owner per fact.** Product plan owns intended completion; `.session/TRACKING.json` owns derived cross-session progress; generated `PLAN.md` is read-only; `CURRENT.md` owns tactical handoff; `ORCHESTRATION.json` owns chain mechanics.
 9. **History is not truth.** Git history, past sessions, file presence, and prior skills may route investigation but cannot prove completion or grant authority.
 10. **Reconciliation is not a goal.** If a bounded preflight proves the candidate already complete, record the evidence and select again inline. Never initialize a chain, consume a hop, or spawn a successor solely for reconciliation.

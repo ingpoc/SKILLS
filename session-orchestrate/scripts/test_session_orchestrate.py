@@ -210,7 +210,8 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["project_inventory"]["inventory_mode"], "cheap")
         self.assertNotIn("discovery_hints", output["project_inventory"])
         self.assertEqual(output["exploration"]["action"], "first-migration")
-        self.assertEqual(output["exploration"]["agent_type"], "cost_scan")
+        self.assertEqual(output["exploration"]["agent_type"], "explorer")
+        self.assertEqual(output["exploration"]["agent_config_owner"], "~/.codex/agents/explorer.toml")
         self.assertIsNone(output["goal_file"])
 
     def test_entry_refuses_global_skills_repository_as_project_root(self) -> None:
