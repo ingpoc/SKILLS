@@ -18,6 +18,13 @@ from typing import Any, Iterator
 
 SCHEMA_VERSION = 1
 ACTIVE = {"active", "handoff_pending"}
+METRIC_NAMES = {
+    "handoffs_prepared",
+    "successors_created",
+    "duplicate_spawn_attempts",
+    "operator_repairs",
+    "auto_compactions",
+}
 
 
 def now() -> str:
@@ -104,6 +111,7 @@ def init(args: argparse.Namespace) -> int:
             "goal_hash": None,
             "handoff": None,
             "history": [],
+            "metrics": {name: 0 for name in sorted(METRIC_NAMES)},
             "created_at": stamp,
             "updated_at": stamp,
         }
@@ -139,6 +147,10 @@ def prepare_handoff(args: argparse.Namespace) -> int:
         if not state:
             return fail("no orchestration state")
         if state.get("status") == "handoff_pending":
+            metrics = state.setdefault("metrics", {})
+            metrics["duplicate_spawn_attempts"] = int(metrics.get("duplicate_spawn_attempts", 0)) + 1
+            state["updated_at"] = now()
+            atomic_write(path, state)
             handoff = state.get("handoff") or {}
             return emit({**handoff, "chain_id": state["chain_id"], "spawn_allowed": False, "reason": "handoff_already_pending"})
         if state.get("status") != "active":
@@ -161,6 +173,8 @@ def prepare_handoff(args: argparse.Namespace) -> int:
         }
         state["status"] = "handoff_pending"
         state["handoff"] = handoff
+        metrics = state.setdefault("metrics", {})
+        metrics["handoffs_prepared"] = int(metrics.get("handoffs_prepared", 0)) + 1
         state["updated_at"] = now()
         atomic_write(path, state)
         return emit({**handoff, "chain_id": state["chain_id"], "max_hops": state["max_hops"], "spawn_allowed": True})
@@ -178,6 +192,9 @@ def record_successor(args: argparse.Namespace) -> int:
             return fail(f"successor already recorded: {existing}")
         handoff["successor_thread_id"] = args.thread_id
         state["handoff"] = handoff
+        metrics = state.setdefault("metrics", {})
+        if not existing:
+            metrics["successors_created"] = int(metrics.get("successors_created", 0)) + 1
         state["updated_at"] = now()
         atomic_write(path, state)
         return emit({"chain_id": state["chain_id"], "successor_thread_id": args.thread_id, "recorded": True})
@@ -218,6 +235,17 @@ def stop(args: argparse.Namespace) -> int:
         return emit({"chain_id": state["chain_id"], "status": args.status, "reason": args.reason})
 
 
+def record_metric(args: argparse.Namespace) -> int:
+    with locked() as (path, state):
+        if not state:
+            return fail("no orchestration state")
+        metrics = state.setdefault("metrics", {})
+        metrics[args.name] = int(metrics.get(args.name, 0)) + args.increment
+        state["updated_at"] = now()
+        atomic_write(path, state)
+        return emit({"chain_id": state["chain_id"], "metric": args.name, "value": metrics[args.name]})
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="Manage bounded session-orchestrate state")
     commands = root.add_subparsers(dest="command", required=True)
@@ -253,6 +281,11 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--status", choices=("completed", "blocked", "stopped"), required=True)
     command.add_argument("--reason", required=True)
     command.set_defaults(handler=stop)
+
+    command = commands.add_parser("record-metric")
+    command.add_argument("--name", choices=sorted(METRIC_NAMES), required=True)
+    command.add_argument("--increment", type=int, default=1)
+    command.set_defaults(handler=record_metric)
     return root
 
 

@@ -42,7 +42,9 @@ After validation:
 
 1. Call `create_goal` with the exact Markdown objective.
 2. Save its hash with `python3 scripts/chain_state.py set-goal --objective-file <goal-file>`.
-3. Work until the stop conditions are met or a real blocker is reached.
+3. Load at most one bounded owner slice needed for the first action.
+4. The next tool action must be the smallest concrete implementation or verification attempt. Do not open a second design cycle. If no concrete attempt is safe, checkpoint the specific blocker and stop.
+5. Work until the stop conditions are met or a real blocker is reached.
 
 ## Closeout lane
 
@@ -50,7 +52,7 @@ After validation:
 
 1. Verify every stop condition with current evidence.
 2. Call `update_goal` with `complete`.
-3. Run `save-session` with the completed objective as `reference-only`; make the checkpoint's next action the next product-plan decision, not continuation of completed work.
+3. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy reference-only --next-action "<next product-plan decision>" --verification "<proof summary>"`; do not hand-build multiline save-session environment variables.
 4. Stop instead of spawning when the phase exit gate is complete, the next work crosses an authority boundary, or the chain reached `max_hops`.
 5. Otherwise run `python3 scripts/chain_state.py prepare-handoff --kind next-goal`.
 
@@ -59,7 +61,7 @@ After validation:
 Use only after an actual automatic compaction or when the current task cannot safely finish without another one:
 
 1. Keep the active goal unfinished.
-2. Run `save-session` with the exact `get_goal` objective and `SAVE_SESSION_GOAL_RESUME_POLICY=ensure-active`.
+2. Run `python3 scripts/checkpoint.py --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
 3. Run `python3 scripts/chain_state.py prepare-handoff --kind continue-goal`.
 
 ### Create one successor
@@ -96,5 +98,7 @@ For each handoff record:
 - compactions before handoff: count
 - approximate handoff overhead: tool calls and elapsed time
 - authority/phase stop correctness: pass/fail
+
+Record observed counters with `chain_state.py record-metric`. Operator steering that is required to escape repeated planning, retry, or closeout work counts as an operator repair.
 
 After two real handoffs, keep only if all safety checks pass and at least one task avoided broad rediscovery or repeat compaction. Otherwise refine once; if the second trial remains flat or worse, delete the skill and hook.

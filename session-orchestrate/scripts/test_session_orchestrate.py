@@ -14,6 +14,7 @@ HERE = Path(__file__).resolve().parent
 STATE = HERE / "chain_state.py"
 VALIDATE = HERE / "validate_goal.py"
 POSTCOMPACT = HERE / "postcompact_nudge.py"
+CHECKPOINT = HERE / "checkpoint.py"
 
 
 def goal(words: int = 220) -> str:
@@ -77,6 +78,10 @@ class SessionOrchestrateTests(unittest.TestCase):
         claimed = json.loads(self.run_state("claim", "--nonce", "n1").stdout)
         self.assertEqual(claimed["hop"], 2)
         self.assertEqual(claimed["kind"], "next-goal")
+        state = json.loads(self.run_state("status").stdout)
+        self.assertEqual(state["metrics"]["handoffs_prepared"], 1)
+        self.assertEqual(state["metrics"]["successors_created"], 1)
+        self.assertEqual(state["metrics"]["duplicate_spawn_attempts"], 1)
 
     def test_wrong_nonce_cannot_claim(self) -> None:
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
@@ -106,6 +111,31 @@ class SessionOrchestrateTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(POSTCOMPACT)], input=event, text=True, capture_output=True)
         output = json.loads(result.stdout)
         self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "PostCompact")
+
+    def test_checkpoint_round_trips_exact_goal(self) -> None:
+        goal_path = self.write_goal()
+        result = subprocess.run([
+            sys.executable,
+            str(CHECKPOINT),
+            "--root",
+            str(self.root),
+            "--goal-file",
+            str(goal_path),
+            "--resume-policy",
+            "ensure-active",
+            "--next-action",
+            "Run the exact saved first action.",
+        ], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        saved = (self.root / ".claude" / "session-data" / "CURRENT.md").read_text(encoding="utf-8")
+        self.assertIn(goal_path.read_text(encoding="utf-8").rstrip(), saved)
+        self.assertIn("resume_policy: ensure-active", saved)
+
+    def test_record_metric_works_after_stop(self) -> None:
+        self.run_state("init", "--max-hops", "1", "--phase-boundary", "Phase 5")
+        self.run_state("stop", "--status", "stopped", "--reason", "trial complete")
+        result = json.loads(self.run_state("record-metric", "--name", "operator_repairs", "--increment", "3").stdout)
+        self.assertEqual(result["value"], 3)
 
 
 if __name__ == "__main__":
