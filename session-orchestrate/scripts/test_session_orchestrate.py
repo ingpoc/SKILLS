@@ -15,6 +15,7 @@ STATE = HERE / "chain_state.py"
 VALIDATE = HERE / "validate_goal.py"
 POSTCOMPACT = HERE / "postcompact_nudge.py"
 CHECKPOINT = HERE / "checkpoint.py"
+ENTRY = HERE / "entry.py"
 
 
 def goal(words: int = 220) -> str:
@@ -41,8 +42,11 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.env = {**os.environ, "SESSION_ORCHESTRATE_ROOT": str(self.root)}
+        self.entry_goal_files: list[Path] = []
 
     def tearDown(self) -> None:
+        for path in self.entry_goal_files:
+            path.unlink(missing_ok=True)
         self.temp.cleanup()
 
     def run_state(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
@@ -56,9 +60,73 @@ class SessionOrchestrateTests(unittest.TestCase):
         path.write_text(goal(words), encoding="utf-8")
         return path
 
+    def write_checkpoint(self, policy: str, objective: str) -> Path:
+        path = self.root / ".claude" / "session-data" / "CURRENT.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# Session checkpoint\n\n"
+            "## codex_goal\n"
+            f"resume_policy: {policy}\n"
+            "objective:\n"
+            f"{objective.rstrip()}\n\n"
+            "## working_on\nSaved work.\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def run_entry(self, ok: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run([sys.executable, str(ENTRY)], env=self.env, text=True, capture_output=True)
+        if ok and result.returncode != 0:
+            self.fail(result.stderr)
+        if result.returncode == 0:
+            goal_file = json.loads(result.stdout).get("goal_file")
+            if goal_file:
+                self.entry_goal_files.append(Path(goal_file))
+        return result
+
     def test_goal_validator_accepts_session_sized_goal(self) -> None:
         result = subprocess.run([sys.executable, str(VALIDATE), str(self.write_goal())], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_entry_extracts_exact_ensure_active_goal(self) -> None:
+        objective = goal()
+        self.write_checkpoint("ensure-active", objective)
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "resume-exact-goal")
+        self.assertEqual(output["invocation_authority"], "saved-goal-only")
+        self.assertEqual(output["chain_action"], "init-new-chain")
+        goal_file = Path(output["goal_file"])
+        self.assertEqual(goal_file.read_text(encoding="utf-8").rstrip(), objective.rstrip())
+        self.assertEqual(goal_file.stat().st_mode & 0o777, 0o600)
+
+    def test_entry_reuses_active_chain(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["chain_action"], "reuse-active-chain")
+        self.assertEqual(output["chain"]["phase_boundary"], "Phase 5")
+
+    def test_entry_resumes_goal_without_reopening_stopped_chain(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        self.run_state("init", "--max-hops", "1", "--phase-boundary", "Phase 5")
+        self.run_state("stop", "--status", "stopped", "--reason", "retry window ended")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["chain_action"], "resume-goal-chain-closed")
+        self.assertEqual(output["chain"]["stop_reason"], "retry window ended")
+
+    def test_entry_does_not_resume_reference_only_goal(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "choose-next-goal")
+        self.assertIsNone(output["goal_file"])
+
+    def test_entry_starts_new_chain_after_reference_only_checkpoint(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        self.run_state("init", "--max-hops", "1", "--phase-boundary", "Phase 5")
+        self.run_state("stop", "--status", "completed", "--reason", "phase complete")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "choose-next-goal")
+        self.assertEqual(output["chain_action"], "init-new-chain")
 
     def test_goal_validator_rejects_short_goal(self) -> None:
         result = subprocess.run([sys.executable, str(VALIDATE), str(self.write_goal(50))], text=True, capture_output=True)

@@ -81,6 +81,7 @@ For per-check rationale and fix recipes:
   cat $CREATE_SKILL_DIR/references/checklist.md
 ────────────────────────────────────────────────────────────────────
 EOF
+    exit "$EXIT"
 fi
 
-exit "$EXIT"
+python3 "$SKILL_DIR/scripts/test_session_orchestrate.py"

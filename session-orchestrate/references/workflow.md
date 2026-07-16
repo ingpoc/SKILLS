@@ -14,13 +14,26 @@ Drop the workflow when handoffs repeatedly require operator repair, duplicate wo
 
 ## Entry lane
 
+### Invocation contract
+
+The operator invoking `$session-orchestrate` is the authorization signal. Do not ask them to repeat a fixed sentence such as "authorize a new recovery window."
+
+1. Run `python3 scripts/entry.py` before broad retrieval.
+2. When it returns `mode: resume-exact-goal`, call `get_goal` and compare against the exact objective in `goal_file`:
+   - matching active goal -> reuse it;
+   - no goal or the same goal in `blocked` state -> call `create_goal` with the exact file content; this invocation begins a fresh blocked audit;
+   - a different active goal -> stop for conflict resolution;
+   - the same goal already completed -> treat the checkpoint as stale and choose the next goal.
+3. The invocation renews one bounded execution window for actions already authorized by that saved objective and route. A prior stop caused only by an expired retry window, temporary browser/tooling state, or operator pause is not a reason to ask for another phrase.
+4. Preserve every saved constraint. Invocation alone never authorizes spend, deployment, external sends, destructive operations, credential inspection, or a phase change.
+5. Follow `chain_action`: reuse an active chain, claim only a nonce-addressed pending handoff, or initialize a new bounded chain. For `resume-goal-chain-closed`, continue the exact goal in the current task while leaving the stopped chain untouched and creating no successor; the old boundary remains evidence, not a ban on in-task work.
+
 ### Preflight
 
-1. Confirm the operator explicitly authorized a multi-task chain. If not, use ordinary `save-session` and stop.
-2. Call `get_goal`. Preserve a matching unfinished goal; never replace a different unfinished goal.
-3. Run `resume-session` when `CURRENT.md` exists. Verify any saved first command against current repository evidence before executing it.
-4. Inspect the narrow owner section for delivery order. In BrandGPT, read the current `PRODUCTPLAN` phase section and its exit gate.
-5. Initialize or claim chain state:
+1. Call `get_goal`. Preserve a matching unfinished goal; never replace a different unfinished goal.
+2. Run `resume-session` when `CURRENT.md` exists, then use the exact goal file returned by `entry.py`. Verify any saved first command against current repository evidence before executing it.
+3. Inspect the narrow owner section for delivery order. In BrandGPT, read the current `PRODUCTPLAN` phase section and its exit gate.
+4. Initialize or claim chain state:
    - New chain: `python3 scripts/chain_state.py init --max-hops 3 --phase-boundary "<boundary>"`
    - Successor: `python3 scripts/chain_state.py claim --nonce "<nonce>"`
 

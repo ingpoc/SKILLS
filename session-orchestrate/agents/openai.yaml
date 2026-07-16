@@ -1,7 +1,7 @@
 interface:
   display_name: "Session Orchestrate"
   short_description: "Chain bounded Codex tasks with exact checkpoint handoffs"
-  default_prompt: "Use $session-orchestrate to choose one session-sized goal, run it to a verified stop, and create no more than one authorized successor in the same project."
+  default_prompt: "Use $session-orchestrate to resume the exact ensure-active checkpoint automatically when present; otherwise choose one session-sized goal. Treat this invocation as consent for the saved bounded work, require no magic follow-up phrase, preserve all hard authority gates, and create no more than one successor."
 
 policy:
   allow_implicit_invocation: false
