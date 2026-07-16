@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,10 @@ class CheckpointInspectorTests(unittest.TestCase):
         self.git("commit", "-m", "owner")
         self.commit = self.git("rev-parse", "HEAD").stdout.strip()
         self.goal_files: list[Path] = []
+        self.env = {
+            **os.environ,
+            "SESSION_WORKSPACE_HELPER": str(HERE.parent.parent / "session-orchestrate" / "scripts" / "session_workspace.py"),
+        }
 
     def tearDown(self) -> None:
         for path in self.goal_files:
@@ -61,7 +66,7 @@ class CheckpointInspectorTests(unittest.TestCase):
         window: str = "24",
         first_command: str | None = None,
     ) -> None:
-        checkpoint = self.root / ".claude" / "session-data" / "CURRENT.md"
+        checkpoint = self.root / ".session" / "CURRENT.md"
         checkpoint.parent.mkdir(parents=True, exist_ok=True)
         route = "## route_contract\n*(none supplied)*\n"
         if first_command is not None:
@@ -86,7 +91,7 @@ class CheckpointInspectorTests(unittest.TestCase):
         command = [sys.executable, str(INSPECTOR), "--root", str(self.root), "--now", NOW]
         if write_goal:
             command.append("--write-goal-file")
-        result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        result = subprocess.run(command, env=self.env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)
         if output.get("goal_file"):

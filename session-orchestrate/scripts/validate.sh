@@ -86,3 +86,4 @@ fi
 
 python3 "$SKILL_DIR/scripts/test_session_orchestrate.py"
 python3 "$SKILL_DIR/scripts/test_project_inventory.py"
+python3 "$SKILL_DIR/scripts/test_session_workspace.py"

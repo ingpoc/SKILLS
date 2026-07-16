@@ -1,6 +1,6 @@
 ---
 name: resume-session
-description: "Inspect `.claude/session-data/CURRENT.md`, surface the tactical handoff, and restore only an eligible explicit Codex goal. Triggers: `/resume-session`, `resume session`, `continue where I left off`, `pick up where we left off`. Use when a prior session may contain useful intent, but first reject stale, malformed, branch-diverged, commit-diverged, route-invalid, or reference-only checkpoints. Use `resume-session --inspect-json` for the deterministic eligibility decision."
+description: "Inspect `.session/CURRENT.md`, surface the tactical handoff, and restore only an eligible explicit Codex goal. Triggers: `/resume-session`, `resume session`, `continue where I left off`, `pick up where we left off`. Use when a prior session may contain useful intent, but first reject stale, malformed, branch-diverged, commit-diverged, route-invalid, or reference-only checkpoints. Read legacy `.claude/session-data/CURRENT.md` only before `.session/` exists."
 allowed-tools: Read, Bash, get_goal, create_goal
 ---
 
@@ -17,7 +17,7 @@ This skill exists to surface the most recent tactical checkpoint before doing br
 | Primary archetype | deterministic script workflow |
 | Secondary archetypes | reference workflow |
 | Operator trigger | `/resume-session`, `resume session`, `continue where I left off`, `pick up where we left off` |
-| Output | the contents of `.claude/session-data/CURRENT.md` plus restored goal state and a concise tactical synthesis |
+| Output | the contents of canonical `.session/CURRENT.md` plus restored goal state and a concise tactical synthesis |
 | Success evidence | inspector classifies checkpoint eligibility; only a fresh, consistent explicit goal is matched or created without replacing another unfinished goal |
 | Deterministic surface | the global shell command `resume-session` |
 | Judgment surface | deciding how much of the checkpoint is still relevant before acting |
@@ -30,7 +30,7 @@ This skill exists to surface the most recent tactical checkpoint before doing br
 1. Honor `RESUME_SESSION_ROOT`, then search the current directory and its
    ancestors for the checkpoint. Only then use `git rev-parse`; never let a
    home-directory Git root displace a nested workspace checkpoint.
-2. Look for `.claude/session-data/CURRENT.md`.
+2. Look for `.session/CURRENT.md`. Use legacy `.claude/session-data/CURRENT.md` only before the canonical workspace exists.
 3. Run `resume-session --inspect-json`. Its inspector is the sole owner of checkpoint freshness and consistency.
 4. Treat `ensure-active` as a candidate, not permanent authority. Automatic restoration requires `eligibility: fresh`; `review-checkpoint` requires current owner-plan and repo evidence before selecting any goal.
 5. A `reference-only`, missing, invalid, expired, future-dated, wrong-root, branch-diverged, commit-diverged, route-invalid, or chain-conflicting checkpoint must not auto-create a goal.

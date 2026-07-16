@@ -4,6 +4,7 @@ set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WRAPPER="$HOME/.local/bin/resume-session"
 INSPECTOR="$SKILL_DIR/scripts/inspect_checkpoint.py"
+export SESSION_WORKSPACE_HELPER="$SKILL_DIR/../session-orchestrate/scripts/session_workspace.py"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -14,8 +15,8 @@ fi
 
 PROJECT="$TMP_DIR/project"
 NESTED="$PROJECT/nested/work"
-mkdir -p "$PROJECT/.claude/session-data" "$NESTED"
-cat >"$PROJECT/.claude/session-data/CURRENT.md" <<'EOF'
+mkdir -p "$PROJECT/.session" "$NESTED"
+cat >"$PROJECT/.session/CURRENT.md" <<'EOF'
 ancestor checkpoint
 
 ## codex_goal
@@ -25,7 +26,7 @@ EOF
 
 OUTPUT="$(cd "$NESTED" && RESUME_SESSION_INSPECTOR="$INSPECTOR" "$WRAPPER")"
 case "$OUTPUT" in
-  *"$PROJECT/.claude/session-data/CURRENT.md"*"ancestor checkpoint"*"## codex_goal"*"Complete the exact saved objective"*) ;;
+  *"$PROJECT/.session/CURRENT.md"*"ancestor checkpoint"*"## codex_goal"*"Complete the exact saved objective"*) ;;
   *)
     printf 'ancestor checkpoint resolution failed:\n%s\n' "$OUTPUT" >&2
     exit 1

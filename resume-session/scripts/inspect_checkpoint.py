@@ -20,6 +20,8 @@ DEFAULT_RESUME_WINDOW_HOURS = 24
 MAX_RESUME_WINDOW_HOURS = 168
 FUTURE_TOLERANCE_SECONDS = 300
 POLICIES = {"ensure-active", "reference-only"}
+HERE = Path(__file__).resolve().parent
+WORKSPACE_HELPER = HERE.parent.parent / "session-orchestrate" / "scripts" / "session_workspace.py"
 CHECKPOINT_SECTIONS = (
     "handoff_focus",
     "codex_goal",
@@ -56,6 +58,8 @@ def resolve_root(explicit: Path | None = None) -> Path:
         return Path(override).expanduser().resolve()
     candidate = Path.cwd().resolve()
     for directory in (candidate, *candidate.parents):
+        if (directory / ".session").is_dir():
+            return directory
         if (directory / ".claude" / "session-data" / "CURRENT.md").is_file():
             return directory
     result = run_git(candidate, "rev-parse", "--show-toplevel")
@@ -135,6 +139,23 @@ def private_goal_file(objective: str) -> tuple[Path, str]:
     return path, f"sha256:{digest}"
 
 
+def checkpoint_path(root: Path) -> Path:
+    helper = Path(os.environ.get("SESSION_WORKSPACE_HELPER", WORKSPACE_HELPER)).expanduser()
+    if helper.is_file():
+        result = subprocess.run(
+            [sys.executable, str(helper), "path", "--root", str(root), "--field", "current"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip())
+    canonical = root / ".session" / "CURRENT.md"
+    legacy = root / ".claude" / "session-data" / "CURRENT.md"
+    return canonical if canonical.parent.is_dir() or not legacy.is_file() else legacy
+
+
 def current_git_state(root: Path) -> tuple[str | None, str | None]:
     top = run_git(root, "rev-parse", "--show-toplevel")
     if top.returncode != 0 or Path(top.stdout.strip()).resolve() != root:
@@ -148,7 +169,7 @@ def current_git_state(root: Path) -> tuple[str | None, str | None]:
 
 
 def inspect(root: Path, *, now: datetime, write_goal_file: bool) -> dict[str, Any]:
-    checkpoint = root / ".claude" / "session-data" / "CURRENT.md"
+    checkpoint = checkpoint_path(root)
     if not checkpoint.is_file():
         return {
             "success": True,
@@ -299,7 +320,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         root = resolve_root(args.root)
-        checkpoint = root / ".claude" / "session-data" / "CURRENT.md"
+        checkpoint = checkpoint_path(root)
         if args.path_only:
             print(checkpoint)
             return 0

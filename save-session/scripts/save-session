@@ -9,6 +9,10 @@ resolve_root() {
 
   local candidate="$PWD"
   while [ "$candidate" != "/" ]; do
+    if [ -d "$candidate/.session" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
     if [ -f "$candidate/.claude/session-data/CURRENT.md" ]; then
       printf '%s\n' "$candidate"
       return
@@ -54,8 +58,14 @@ print_list() {
 }
 
 ROOT_DIR="$(resolve_root)"
-SESSION_DIR="$ROOT_DIR/.claude/session-data"
-SESSION_FILE="$SESSION_DIR/CURRENT.md"
+WORKSPACE_HELPER="${SESSION_WORKSPACE_HELPER:-$HOME/.codex/skills/session-orchestrate/scripts/session_workspace.py}"
+if [ ! -f "$WORKSPACE_HELPER" ]; then
+  printf 'session workspace helper not found at %s\n' "$WORKSPACE_HELPER" >&2
+  exit 2
+fi
+python3 "$WORKSPACE_HELPER" ensure --root "$ROOT_DIR" >/dev/null
+SESSION_DIR="$(python3 "$WORKSPACE_HELPER" path --root "$ROOT_DIR" --field session)"
+SESSION_FILE="$(python3 "$WORKSPACE_HELPER" path --root "$ROOT_DIR" --field current)"
 
 HANDOFF_FOCUS="${SAVE_SESSION_HANDOFF_FOCUS:-}"
 GOAL_OBJECTIVE="${SAVE_SESSION_GOAL_OBJECTIVE:-}"
@@ -111,8 +121,6 @@ if [ -z "$HANDOFF_FOCUS" ] && [ -n "$FIRST_COMMAND" ]; then
   HANDOFF_FOCUS="Resume from route_contract.first_command; avoid broad retrieval until the stop condition is checked."
 fi
 
-mkdir -p "$SESSION_DIR"
-
 GIT_STATUS=""
 ROOT_GIT_DIR="$(git -C "$ROOT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ "$ROOT_GIT_DIR" = "$ROOT_DIR" ]; then
@@ -126,11 +134,6 @@ if [ "$ROOT_GIT_DIR" = "$ROOT_DIR" ]; then
     GIT_SUMMARY="clean"
   else
     GIT_SUMMARY="dirty: ${STATUS_COUNT} changed or untracked path(s); raw status omitted by default"
-  fi
-
-  EXCLUDE_FILE="$ROOT_DIR/.git/info/exclude"
-  if [ -f "$EXCLUDE_FILE" ] && ! grep -Fqx '.claude/session-data/' "$EXCLUDE_FILE"; then
-    printf '\n.claude/session-data/\n' >>"$EXCLUDE_FILE"
   fi
 
   if [ "$INCLUDE_GIT_STATUS" = "1" ]; then

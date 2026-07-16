@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from session_workspace import canonical_paths
+
 
 def resolve_command() -> str:
     command = shutil.which("save-session")
@@ -59,7 +61,7 @@ def main() -> int:
         sys.stderr.write(result.stderr or result.stdout)
         return result.returncode
 
-    checkpoint = args.root.resolve() / ".claude" / "session-data" / "CURRENT.md"
+    checkpoint = canonical_paths(args.root.resolve())["current"]
     try:
         saved = checkpoint.read_text(encoding="utf-8")
     except OSError as exc:

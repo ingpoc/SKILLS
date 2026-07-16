@@ -4,6 +4,7 @@ set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WRAPPER="$SKILL_DIR/scripts/save-session"
 INSTALLED="$HOME/.local/bin/save-session"
+export SESSION_WORKSPACE_HELPER="$SKILL_DIR/../session-orchestrate/scripts/session_workspace.py"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -23,7 +24,7 @@ SAVE_SESSION_WORKING_ON="Goal persistence test" \
 SAVE_SESSION_NEXT_ACTION="Resume the exact goal." \
 "$WRAPPER" >/dev/null
 
-CHECKPOINT="$PROJECT/.claude/session-data/CURRENT.md"
+CHECKPOINT="$PROJECT/.session/CURRENT.md"
 grep -Fq '## codex_goal' "$CHECKPOINT"
 grep -Fq 'resume_policy: ensure-active' "$CHECKPOINT"
 grep -Fq 'Complete the exact saved objective.' "$CHECKPOINT"
@@ -35,13 +36,21 @@ mkdir -p "$CUSTOM"
 SAVE_SESSION_ROOT="$CUSTOM" \
 SAVE_SESSION_RESUME_WINDOW_HOURS="72" \
 "$WRAPPER" >/dev/null 2>&1
-grep -Fq '**resume_window_hours:** 72' "$CUSTOM/.claude/session-data/CURRENT.md"
+grep -Fq '**resume_window_hours:** 72' "$CUSTOM/.session/CURRENT.md"
+
+NESTED_ROOT="$TMP_DIR/nested-root"
+NESTED_WORK="$NESTED_ROOT/path/to/work"
+mkdir -p "$NESTED_WORK"
+python3 "$SESSION_WORKSPACE_HELPER" ensure --root "$NESTED_ROOT" >/dev/null
+(cd "$NESTED_WORK" && "$WRAPPER" >/dev/null 2>&1)
+test -f "$NESTED_ROOT/.session/CURRENT.md"
+test ! -e "$NESTED_WORK/.session/CURRENT.md"
 
 NO_GOAL="$TMP_DIR/no-goal"
 mkdir -p "$NO_GOAL"
 SAVE_SESSION_ROOT="$NO_GOAL" "$WRAPPER" >/dev/null 2>&1
 grep -Fq '*(none supplied; do not infer a goal from working_on or next_action)*' \
-  "$NO_GOAL/.claude/session-data/CURRENT.md"
+  "$NO_GOAL/.session/CURRENT.md"
 
 INVALID="$TMP_DIR/invalid"
 mkdir -p "$INVALID"

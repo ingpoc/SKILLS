@@ -1,6 +1,6 @@
 ---
 name: save-session
-description: "Snapshot only resume-relevant tactical context and an explicitly resumable Codex goal to `.claude/session-data/CURRENT.md`. Triggers: `/save-session`, `save session`, `save progress`, `checkpoint`. Use when the next agent needs a compact, time-bounded handoff with the exact goal, first action, validation, blockers, route, and context to avoid. Do not capture noisy recent files or treat the checkpoint as permanent truth. Use the shell command `save-session` for the deterministic write path."
+description: "Snapshot only resume-relevant tactical context and an explicitly resumable Codex goal to `.session/CURRENT.md`. Triggers: `/save-session`, `save session`, `save progress`, `checkpoint`. Use when the next agent needs a compact, time-bounded handoff with the exact goal, first action, validation, blockers, route, and context to avoid. Do not capture noisy recent files or treat the checkpoint as permanent truth. Use the shell command `save-session` for the deterministic write path."
 allowed-tools: Bash, get_goal
 ---
 
@@ -19,7 +19,7 @@ When the session exposed preventable friction, use `session-introspection` befor
 | Primary archetype | deterministic script workflow |
 | Secondary archetypes | reference workflow |
 | Operator trigger | `/save-session`, `save session`, `save progress`, `checkpoint` |
-| Output | `.claude/session-data/CURRENT.md` written at the git root or current directory |
+| Output | `.session/CURRENT.md` beside the program plan, tracking, and orchestration state at the project root |
 | Success evidence | command prints the checkpoint path; the file exists with a fresh timestamp and an explicit `codex_goal` section |
 | Deterministic surface | the global shell command `save-session` |
 | Judgment surface | deciding what the next agent needs and what should be omitted |
@@ -30,16 +30,17 @@ When the session exposed preventable friction, use `session-introspection` befor
 ### Preflight
 
 1. Resolve the target root with `git rev-parse --show-toplevel` when inside a repo; otherwise use the current working directory.
-2. If the current session had material, preventable friction, run `session-introspection` first and keep only its highest-value finding/control for the checkpoint.
-3. Prefer the installed `save-session` shell command. If it is unavailable, reproduce its behavior with Bash only.
-4. Call `get_goal`. If the current task has an unfinished goal that should
+2. Ensure the shared `.session/` workspace through `session-orchestrate/scripts/session_workspace.py`; never create a parallel checkpoint directory.
+3. If the current session had material, preventable friction, run `session-introspection` first and keep only its highest-value finding/control for the checkpoint.
+4. Prefer the installed `save-session` shell command. If it is unavailable, reproduce its behavior with Bash only.
+5. Call `get_goal`. If the current task has an unfinished goal that should
    continue in a fresh task, pass its exact objective as
    `SAVE_SESSION_GOAL_OBJECTIVE` with
    `SAVE_SESSION_GOAL_RESUME_POLICY=ensure-active`. Do not infer a goal from
-   `working_on` prose, and do not checkpoint completed or blocked goals as work
-   to reactivate. Use `reference-only` when the objective is useful history but
+   `working_on` prose, and do not checkpoint completed goals as work to reactivate.
+   A blocked goal may use `ensure-active` only when it should resume after its external gate changes. Use `reference-only` when the objective is useful history but
    must not be recreated.
-5. If the current session has any nuance, pass curated context via environment variables before invoking the command. Prefer explicit handoff content over inferred filesystem recency:
+6. If the current session has any nuance, pass curated context via environment variables before invoking the command. Prefer explicit handoff content over inferred filesystem recency:
    - `SAVE_SESSION_ROOT` — explicit project root when an unrelated ancestor (for example `$HOME`) is also a Git worktree
    - `SAVE_SESSION_GOAL_OBJECTIVE` — exact objective returned by `get_goal`; never a shortened paraphrase
    - `SAVE_SESSION_GOAL_RESUME_POLICY` — `ensure-active` or `reference-only`

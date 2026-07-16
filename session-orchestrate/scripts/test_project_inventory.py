@@ -28,6 +28,9 @@ class ProjectInventoryTests(unittest.TestCase):
         docs.mkdir()
         (docs / "PRODUCTPLAN.md").write_text("# Product plan\n", encoding="utf-8")
         (docs / "IMPLEMENTATION_STATUS.md").write_text("# Status\n", encoding="utf-8")
+        generated = self.root / ".session"
+        generated.mkdir()
+        (generated / "IMPLEMENTATION_STATUS.md").write_text("generated state\n", encoding="utf-8")
         skill = self.root / ".codex" / "skills" / "project-test"
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text("---\nname: project-test\n---\n", encoding="utf-8")
@@ -75,10 +78,19 @@ class ProjectInventoryTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def run_inventory(self) -> dict[str, object]:
+    def run_inventory(self, detail: str = "cheap") -> dict[str, object]:
         env = {**os.environ, "CODEX_HOME": str(self.codex_home)}
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--root", str(self.root), "--session-days", "30"],
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--root",
+                str(self.root),
+                "--detail",
+                detail,
+                "--session-days",
+                "30",
+            ],
             env=env,
             text=True,
             capture_output=True,
@@ -86,13 +98,23 @@ class ProjectInventoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def test_inventory_finds_owners_status_skills_and_recent_sessions(self) -> None:
+    def test_cheap_inventory_finds_owners_without_history_or_skill_mining(self) -> None:
         output = self.run_inventory()
+        self.assertEqual(output["inventory_mode"], "cheap")
         self.assertEqual(output["owner_routing_candidates"], ["AGENTS.md"])
         self.assertIn("docs/PRODUCTPLAN.md", output["product_plan_candidates"])
         self.assertIn("docs/IMPLEMENTATION_STATUS.md", output["implementation_status_candidates"])
-        self.assertEqual(output["local_skills"], [".codex/skills/project-test/SKILL.md"])
-        history = output["recent_project_sessions"]
+        self.assertNotIn(".session/IMPLEMENTATION_STATUS.md", output["implementation_status_candidates"])
+        self.assertNotIn("discovery_hints", output)
+        self.assertNotIn("recent_commits", output["git"])
+        self.assertLess(len(json.dumps(output)), 2_000)
+
+    def test_explore_inventory_adds_bounded_hints(self) -> None:
+        output = self.run_inventory("explore")
+        self.assertEqual(output["inventory_mode"], "explore")
+        hints = output["discovery_hints"]
+        self.assertEqual(hints["local_skills"], [".codex/skills/project-test/SKILL.md"])
+        history = hints["recent_project_sessions"]
         self.assertEqual(history["authority"], "hints-only")
         self.assertEqual(history["sessions"][0]["id"], "session-test")
         names = {item["name"] for item in history["common_skill_mentions"]}
@@ -101,9 +123,27 @@ class ProjectInventoryTests(unittest.TestCase):
         self.assertNotIn("contaminating-skill", names)
 
     def test_inventory_does_not_echo_session_message_text(self) -> None:
-        encoded = json.dumps(self.run_inventory())
+        encoded = json.dumps(self.run_inventory("explore"))
         self.assertNotIn("SECRET", encoded)
         self.assertNotIn("do-not-copy", encoded)
+
+    def test_session_history_limit_is_capped_at_three(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--root",
+                str(self.root),
+                "--detail",
+                "explore",
+                "--session-limit",
+                "4",
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--session-limit must be between 0 and 3", result.stderr)
 
 
 if __name__ == "__main__":

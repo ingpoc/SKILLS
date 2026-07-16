@@ -17,9 +17,12 @@ def payload() -> dict[str, object]:
 def find_state(cwd: Path) -> Path | None:
     current = cwd.resolve()
     for root in (current, *current.parents):
-        candidate = root / ".claude" / "session-data" / "ORCHESTRATION.json"
-        if candidate.is_file():
-            return candidate
+        canonical = root / ".session" / "ORCHESTRATION.json"
+        if canonical.is_file():
+            return canonical
+        legacy = root / ".claude" / "session-data" / "ORCHESTRATION.json"
+        if legacy.is_file():
+            return legacy
         if root == Path.home():
             break
     return None

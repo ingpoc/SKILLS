@@ -18,6 +18,7 @@ IGNORED_DIRS = {
     ".next",
     ".turbo",
     ".venv",
+    ".session",
     "build",
     "coverage",
     "dist",
@@ -73,17 +74,24 @@ def rank_candidate(path: Path, root: Path, terms: tuple[str, ...]) -> tuple[int,
     return exact, len(relative.parts), str(relative).lower()
 
 
-def candidates(root: Path, terms: tuple[str, ...], limit: int = 20) -> list[str]:
-    matches = []
+def candidate_sets(root: Path, limit: int = 20) -> tuple[list[str], list[str]]:
+    plan_matches: list[Path] = []
+    status_matches: list[Path] = []
     for path in project_files(root):
         if path.suffix.lower() not in {".md", ".mdx", ".txt", ".json", ".yaml", ".yml"}:
             continue
         normalized = path.stem.lower()
         relative = str(path.relative_to(root)).lower()
-        if any(term in normalized or term in relative for term in terms):
-            matches.append(path)
-    matches.sort(key=lambda path: rank_candidate(path, root, terms))
-    return [str(path.relative_to(root)) for path in matches[:limit]]
+        if any(term in normalized or term in relative for term in PLAN_NAMES):
+            plan_matches.append(path)
+        if any(term in normalized or term in relative for term in STATUS_NAMES):
+            status_matches.append(path)
+    plan_matches.sort(key=lambda path: rank_candidate(path, root, PLAN_NAMES))
+    status_matches.sort(key=lambda path: rank_candidate(path, root, STATUS_NAMES))
+    return (
+        [str(path.relative_to(root)) for path in plan_matches[:limit]],
+        [str(path.relative_to(root)) for path in status_matches[:limit]],
+    )
 
 
 def instruction_files(root: Path) -> list[str]:
@@ -219,49 +227,61 @@ def recent_project_sessions(root: Path, *, days: int = 30, scan_limit: int = 300
     }
 
 
-def inventory(root: Path, *, session_days: int, session_limit: int) -> dict[str, Any]:
+def inventory(root: Path, *, session_days: int, session_limit: int, detail: str) -> dict[str, Any]:
     head = git(root, "rev-parse", "HEAD")
     branch = git(root, "branch", "--show-current")
-    return {
-        "schema_version": 1,
+    plan_candidates, status_candidates = candidate_sets(root)
+    output: dict[str, Any] = {
+        "schema_version": 2,
         "project_root": str(root),
+        "inventory_mode": detail,
         "git": {
             "head": head.stdout.strip() if head.returncode == 0 else None,
             "branch": branch.stdout.strip() if branch.returncode == 0 else None,
-            "recent_commits": recent_commits(root),
         },
         "owner_routing_candidates": instruction_files(root),
-        "product_plan_candidates": candidates(root, PLAN_NAMES),
-        "implementation_status_candidates": candidates(root, STATUS_NAMES),
-        "local_skills": local_skills(root),
-        "recent_project_sessions": recent_project_sessions(
-            root,
-            days=session_days,
-            limit=session_limit,
-        ),
+        "product_plan_candidates": plan_candidates,
+        "implementation_status_candidates": status_candidates,
         "rules": [
             "Owner routes and live acceptance evidence outrank filename heuristics.",
             "Session history and skill mentions are hints, never completion evidence.",
             "Do not infer implementation percentage from file or commit counts.",
         ],
     }
+    if detail == "explore":
+        output["discovery_hints"] = {
+            "recent_commits": recent_commits(root),
+            "local_skills": local_skills(root),
+            "recent_project_sessions": recent_project_sessions(
+            root,
+            days=session_days,
+            limit=session_limit,
+            ),
+        }
+    return output
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build a bounded, read-only project inventory for session orchestration")
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--detail", choices=("cheap", "explore"), default="cheap")
     parser.add_argument("--session-days", type=int, default=30)
-    parser.add_argument("--session-limit", type=int, default=8)
+    parser.add_argument("--session-limit", type=int, default=3)
     args = parser.parse_args()
     if not 1 <= args.session_days <= 90:
         parser.error("--session-days must be between 1 and 90")
-    if not 0 <= args.session_limit <= 20:
-        parser.error("--session-limit must be between 0 and 20")
+    if not 0 <= args.session_limit <= 3:
+        parser.error("--session-limit must be between 0 and 3")
     root = args.root.expanduser().resolve()
     if not root.is_dir():
         print(f"project_inventory: root is not a directory: {root}", file=sys.stderr)
         return 2
-    print(json.dumps(inventory(root, session_days=args.session_days, session_limit=args.session_limit), indent=2))
+    print(json.dumps(inventory(
+        root,
+        session_days=args.session_days,
+        session_limit=args.session_limit,
+        detail=args.detail,
+    ), indent=2))
     return 0
 
 

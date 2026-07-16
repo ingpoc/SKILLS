@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from session_workspace import canonical_paths, ensure_workspace
+
 
 SCHEMA_VERSION = 1
 ACTIVE = {"active", "handoff_pending"}
@@ -48,8 +50,10 @@ def project_root() -> Path:
 
 
 def paths() -> tuple[Path, Path]:
-    directory = project_root() / ".claude" / "session-data"
-    return directory / "ORCHESTRATION.json", directory / "ORCHESTRATION.lock"
+    root = project_root()
+    ensure_workspace(root)
+    workspace = canonical_paths(root)
+    return workspace["orchestration"], workspace["orchestration-lock"]
 
 
 def read_state(path: Path) -> dict[str, Any] | None:

@@ -8,17 +8,39 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from session_workspace import ensure_workspace
+
 
 HERE = Path(__file__).resolve().parent
 INSPECTOR = HERE.parent.parent / "resume-session" / "scripts" / "inspect_checkpoint.py"
 INVENTORY = HERE / "project_inventory.py"
+EXPLORATION_CONFLICT_REASONS = {
+    "chain_completed",
+    "chain_goal_hash_mismatch",
+    "chain_goal_hash_missing",
+    "program_already_complete",
+    "program_goal_blocked",
+}
 
 
-def checkpoint_inspection() -> dict[str, Any]:
-    command = [sys.executable, str(INSPECTOR), "--write-goal-file"]
+def project_root() -> Path:
     override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
     if override:
-        command.extend(["--root", override])
+        return Path(override).expanduser().resolve()
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return Path(result.stdout.strip()).resolve()
+    return Path.cwd().resolve()
+
+
+def checkpoint_inspection(root: Path) -> dict[str, Any]:
+    command = [sys.executable, str(INSPECTOR), "--write-goal-file", "--root", str(root)]
     result = subprocess.run(
         command,
         text=True,
@@ -32,10 +54,7 @@ def checkpoint_inspection() -> dict[str, Any]:
 
 
 def project_inventory(root: Path) -> dict[str, Any]:
-    command = [sys.executable, str(INVENTORY), "--root", str(root)]
-    session_limit = os.environ.get("SESSION_ORCHESTRATE_SESSION_LIMIT", "").strip()
-    if session_limit:
-        command.extend(["--session-limit", session_limit])
+    command = [sys.executable, str(INVENTORY), "--root", str(root), "--detail", "cheap"]
     result = subprocess.run(
         command,
         text=True,
@@ -84,11 +103,48 @@ def downgrade(inspection: dict[str, Any], reason: str) -> None:
     inspection["reasons"] = list(dict.fromkeys([*(inspection.get("reasons") or []), reason]))
 
 
+def exploration_route(workspace: dict[str, Any], inspection: dict[str, Any]) -> dict[str, Any]:
+    reasons = set(inspection.get("reasons") or [])
+    goal_count = sum((workspace.get("goal_counts") or {}).values())
+    bootstrap = not workspace.get("plan_sources") and goal_count == 0
+    if reasons & EXPLORATION_CONFLICT_REASONS:
+        action = "conflict"
+        reason = "checkpoint-chain-program-conflict"
+    elif workspace.get("program_action") == "rebuild-plan" and bootstrap:
+        action = "first-migration"
+        reason = "program-map-missing"
+    elif workspace.get("program_action") == "rebuild-plan":
+        action = "stale-rebuild"
+        reason = "program-map-stale"
+    else:
+        return {
+            "action": "skip",
+            "reason": "fresh-or-terminal-program-state",
+            "decision_owner": "main-agent",
+        }
+    return {
+        "action": action,
+        "reason": reason,
+        "decision_owner": "main-agent",
+        "agent_type": "cost_scan",
+        "agent_config_owner": "~/.codex/agents/cost-scan.toml",
+        "spawn_policy": "conditional",
+        "constraints": [
+            "read-only",
+            "use deterministic owner reads first",
+            "persist only main-agent-validated findings",
+            "collect existing result before retry",
+            "no recursive codex exec fallback",
+        ],
+    }
+
+
 def main() -> int:
     try:
-        inspection = checkpoint_inspection()
-        root = Path(inspection["project_root"])
-        state_path = root / ".claude" / "session-data" / "ORCHESTRATION.json"
+        root = project_root()
+        workspace = ensure_workspace(root)
+        inspection = checkpoint_inspection(root)
+        state_path = Path(workspace["paths"]["orchestration"])
         state = read_chain(state_path)
         inventory = project_inventory(root)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -104,6 +160,14 @@ def main() -> int:
         elif state.get("status") in {"active", "handoff_pending", "stopped", "blocked"} and not recorded_hash:
             downgrade(inspection, "chain_goal_hash_missing")
 
+    if inspection.get("mode") == "resume-exact-goal":
+        if workspace.get("program_action") == "rebuild-plan":
+            downgrade(inspection, "program_state_stale")
+        elif workspace.get("program_action") == "product-complete":
+            downgrade(inspection, "program_already_complete")
+        elif workspace.get("program_action") == "review-blocked-goal":
+            downgrade(inspection, "program_goal_blocked")
+
     mode = inspection["mode"]
     output = {
         **inspection,
@@ -113,7 +177,9 @@ def main() -> int:
             "review-checkpoint": "orchestration-only",
         }[mode],
         "chain_action": chain_action(state, mode),
+        "workspace": workspace,
         "project_inventory": inventory,
+        "exploration": exploration_route(workspace, inspection),
         "chain": None if not state else {
             "chain_id": state.get("chain_id"),
             "status": state.get("status"),

@@ -10,6 +10,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from session_workspace import ensure_workspace, sync_program
+
 
 HERE = Path(__file__).resolve().parent
 STATE = HERE / "chain_state.py"
@@ -51,7 +53,6 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.env = {
             **os.environ,
             "SESSION_ORCHESTRATE_ROOT": str(self.root),
-            "SESSION_ORCHESTRATE_SESSION_LIMIT": "0",
         }
         self.entry_goal_files: list[Path] = []
 
@@ -72,7 +73,30 @@ class SessionOrchestrateTests(unittest.TestCase):
         return path
 
     def write_checkpoint(self, policy: str, objective: str, *, age_hours: int = 0) -> Path:
-        path = self.root / ".claude" / "session-data" / "CURRENT.md"
+        docs = self.root / "docs"
+        docs.mkdir(exist_ok=True)
+        (docs / "PRODUCTPLAN.md").write_text("# Product plan\n\n## Test phase\n", encoding="utf-8")
+        ensure_workspace(self.root)
+        program = self.root / "program.json"
+        program.write_text(json.dumps({
+            "completion_gate": "The exact test goal passes with deterministic evidence.",
+            "phase_boundary": "Test phase",
+            "plan_sources": ["docs/PRODUCTPLAN.md"],
+            "selected_goal_id": "test-goal",
+            "goals": [{
+                "id": "test-goal",
+                "title": "Complete the exact test goal",
+                "status": "in_progress",
+                "plan_ref": "PRODUCTPLAN Test phase",
+                "prerequisites": [],
+                "actions": ["Execute the bounded test action."],
+                "verification": ["Run the deterministic test proof."],
+                "evidence": [],
+                "authority_gates": [],
+            }],
+        }), encoding="utf-8")
+        sync_program(self.root, program)
+        path = self.root / ".session" / "CURRENT.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         saved_at = datetime.now(timezone.utc) - timedelta(hours=age_hours)
         path.write_text(
@@ -90,6 +114,32 @@ class SessionOrchestrateTests(unittest.TestCase):
             encoding="utf-8",
         )
         return path
+
+    def sync_program_status(self, status: str) -> None:
+        docs = self.root / "docs"
+        docs.mkdir(exist_ok=True)
+        (docs / "PRODUCTPLAN.md").write_text("# Product plan\n\n## Test phase\n", encoding="utf-8")
+        ensure_workspace(self.root)
+        selected = None if status == "completed" else "test-goal"
+        program = self.root / f"program-{status}.json"
+        program.write_text(json.dumps({
+            "completion_gate": "The exact test goal passes with deterministic evidence.",
+            "phase_boundary": "Test phase",
+            "plan_sources": ["docs/PRODUCTPLAN.md"],
+            "selected_goal_id": selected,
+            "goals": [{
+                "id": "test-goal",
+                "title": "Complete the exact test goal",
+                "status": status,
+                "plan_ref": "PRODUCTPLAN Test phase",
+                "prerequisites": [],
+                "actions": ["Execute the bounded test action."],
+                "verification": ["Run the deterministic test proof."],
+                "evidence": ["test:verified"] if status == "completed" else [],
+                "authority_gates": [],
+            }],
+        }), encoding="utf-8")
+        sync_program(self.root, program)
 
     def run_entry(self, ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run([sys.executable, str(ENTRY)], env=self.env, text=True, capture_output=True)
@@ -131,6 +181,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["mode"], "resume-exact-goal")
         self.assertEqual(output["invocation_authority"], "saved-goal-only")
         self.assertEqual(output["chain_action"], "init-new-chain")
+        self.assertEqual(output["exploration"]["action"], "skip")
         goal_file = Path(output["goal_file"])
         self.assertEqual(goal_file.read_text(encoding="utf-8").rstrip(), objective.rstrip())
         self.assertEqual(goal_file.stat().st_mode & 0o777, 0o600)
@@ -141,6 +192,21 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["mode"], "choose-next-goal")
         self.assertIn("checkpoint_missing", output["reasons"])
         self.assertEqual(output["project_inventory"]["owner_routing_candidates"], ["AGENTS.md"])
+        self.assertEqual(output["workspace"]["program_action"], "rebuild-plan")
+        self.assertEqual(output["project_inventory"]["inventory_mode"], "cheap")
+        self.assertNotIn("discovery_hints", output["project_inventory"])
+        self.assertEqual(output["exploration"]["action"], "first-migration")
+        self.assertEqual(output["exploration"]["agent_type"], "cost_scan")
+        self.assertIsNone(output["goal_file"])
+
+    def test_fresh_checkpoint_is_not_activated_when_program_source_changed(self) -> None:
+        self.write_checkpoint("ensure-active", goal())
+        (self.root / "docs" / "PRODUCTPLAN.md").write_text("# Product plan\n\nChanged current owner.\n", encoding="utf-8")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["mode"], "review-checkpoint")
+        self.assertIn("program_state_stale", output["reasons"])
+        self.assertIn("plan_source_changed:docs/PRODUCTPLAN.md", output["workspace"]["stale_reasons"])
+        self.assertEqual(output["exploration"]["action"], "stale-rebuild")
         self.assertIsNone(output["goal_file"])
 
     def test_entry_reuses_active_chain(self) -> None:
@@ -166,7 +232,20 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["mode"], "review-checkpoint")
         self.assertEqual(output["chain_action"], "review-current-owner")
         self.assertIn("checkpoint_expired", output["reasons"])
+        self.assertEqual(output["exploration"]["action"], "skip")
         self.assertIsNone(output["goal_file"])
+
+    def test_blocked_program_stops_without_explorer(self) -> None:
+        self.sync_program_status("blocked")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["workspace"]["program_action"], "review-blocked-goal")
+        self.assertEqual(output["exploration"]["action"], "skip")
+
+    def test_complete_program_stops_without_explorer(self) -> None:
+        self.sync_program_status("completed")
+        output = json.loads(self.run_entry().stdout)
+        self.assertEqual(output["workspace"]["program_action"], "product-complete")
+        self.assertEqual(output["exploration"]["action"], "skip")
 
     def test_entry_rejects_chain_goal_hash_mismatch(self) -> None:
         self.write_checkpoint("ensure-active", goal())
@@ -177,6 +256,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         output = json.loads(self.run_entry().stdout)
         self.assertEqual(output["mode"], "review-checkpoint")
         self.assertIn("chain_goal_hash_mismatch", output["reasons"])
+        self.assertEqual(output["exploration"]["action"], "conflict")
         self.assertIsNone(output["goal_file"])
 
     def test_entry_does_not_reopen_completed_chain(self) -> None:
@@ -276,7 +356,7 @@ class SessionOrchestrateTests(unittest.TestCase):
             "Run the exact saved first action.",
         ], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        saved = (self.root / ".claude" / "session-data" / "CURRENT.md").read_text(encoding="utf-8")
+        saved = (self.root / ".session" / "CURRENT.md").read_text(encoding="utf-8")
         self.assertIn(goal_path.read_text(encoding="utf-8").rstrip(), saved)
         self.assertIn("resume_policy: ensure-active", saved)
         self.assertIn("**resume_window_hours:** 24", saved)
