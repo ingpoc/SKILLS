@@ -50,6 +50,12 @@ def git_root(candidate: Path) -> Path | None:
     return Path(result.stdout.strip()).resolve() if result.returncode == 0 and result.stdout.strip() else None
 
 
+def exact_git_root(candidate: Path) -> Path | None:
+    resolved = candidate.expanduser().resolve()
+    root = git_root(resolved)
+    return root if root == resolved else None
+
+
 def canonical_paths(root: Path) -> dict[str, Path]:
     directory = root / SESSION_DIR
     return {

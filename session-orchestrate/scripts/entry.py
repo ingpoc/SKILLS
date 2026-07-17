@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from session_workspace import atomic_text, ensure_workspace, git_root
+from session_workspace import atomic_text, ensure_workspace, exact_git_root, git_root
 from validate_goal import canonical_objective
 
 HERE = Path(__file__).resolve().parent
@@ -33,9 +33,9 @@ def project_root(explicit: Path | None = None) -> Path:
     if root is None:
         raise ValueError("session-orchestrate requires invocation from a Git product repository")
     if explicit:
-        explicit_root = git_root(explicit.expanduser().resolve())
+        explicit_root = exact_git_root(explicit)
         if explicit_root is None:
-            raise ValueError("the explicit session-orchestrate root is not a Git repository")
+            raise ValueError("the explicit session-orchestrate root is not a Git repository root")
         if explicit_root != root:
             raise ValueError("the explicit session-orchestrate root does not match the current repository")
     if root == SKILLS_REPOSITORY_ROOT:

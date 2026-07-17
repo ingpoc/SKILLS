@@ -353,6 +353,38 @@ class SessionOrchestrateTests(unittest.TestCase):
             self.assertIn("requires invocation from a Git product repository", result.stderr)
             self.assertFalse((root / ".session").exists())
 
+    def test_explicit_descendant_root_fails_before_parent_workspace_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory)
+            subprocess.run(["git", "init", "-q", str(outer)], check=True)
+            nested = outer / "nested-product"
+            nested.mkdir()
+            env = {key: value for key, value in os.environ.items() if key != "SESSION_ORCHESTRATE_ROOT"}
+
+            entry = subprocess.run(
+                [sys.executable, str(ENTRY), "--root", str(nested)],
+                cwd=nested,
+                env=env,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(entry.returncode, 1)
+            self.assertIn("explicit session-orchestrate root is not a Git repository root", entry.stderr)
+            self.assertFalse((outer / ".session").exists())
+            self.assertFalse((nested / ".session").exists())
+
+            state = subprocess.run(
+                [sys.executable, str(STATE), "status"],
+                cwd=nested,
+                env={**env, "SESSION_ORCHESTRATE_ROOT": str(nested)},
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(state.returncode, 1)
+            self.assertIn("SESSION_ORCHESTRATE_ROOT is not a Git repository root", state.stderr)
+            self.assertFalse((outer / ".session").exists())
+            self.assertFalse((nested / ".session").exists())
+
     def test_invocation_uses_current_repo_and_rejects_stale_chain_root(self) -> None:
         other = self.root / "other-project"
         other.mkdir()

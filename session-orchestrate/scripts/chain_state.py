@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from session_workspace import atomic_text, canonical_paths, ensure_workspace, git_root
+from session_workspace import atomic_text, canonical_paths, ensure_workspace, exact_git_root, git_root
 from validate_goal import (
     DELIVERY_UNITS,
     canonical_objective,
@@ -43,10 +43,10 @@ def now() -> str:
 def project_root() -> Path:
     override = os.environ.get("SESSION_ORCHESTRATE_ROOT", "").strip()
     if override:
-        root = git_root(Path(override).expanduser().resolve())
+        root = exact_git_root(Path(override))
         cwd_root = git_root(Path.cwd().resolve())
         if root is None:
-            raise ValueError("SESSION_ORCHESTRATE_ROOT is not a Git repository")
+            raise ValueError("SESSION_ORCHESTRATE_ROOT is not a Git repository root")
         if cwd_root is not None and cwd_root != root:
             raise ValueError("SESSION_ORCHESTRATE_ROOT does not match the current repository")
     else:
