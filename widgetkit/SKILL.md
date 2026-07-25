@@ -55,10 +55,13 @@ timeline or CloudKit code:
    - APNs 200, wake unchanged → WidgetKit budget/developer-mode, current
      token, or signed extension capability. Do not debug provider data yet.
    - Wake advanced, pull failed → provider/shared-state or remote fetch path.
-   - Wake and pull succeeded, visible widget stale →
+   - Wake and pull succeeded, writer/provider hashes differ →
+     durable-snapshot pull/apply race.
+   - Wake and pull succeeded, hashes match, visible widget stale →
      timeline/render/cache path.
-4. Accept only a live Home Screen update without opening the host. APNs 200 or
-   a foreground `reloadTimelines` is not push-delivery proof.
+4. Accept only writer/provider hash parity plus a live Home Screen update
+   without opening the host. APNs 200 or a foreground `reloadTimelines` is not
+   push-delivery proof.
 
 ### 1. Create a new widget
 

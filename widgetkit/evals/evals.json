@@ -42,6 +42,20 @@
         "Explains that iPhone and iPad Smart Stacks use `TimelineEntryRelevance` and intent donation, while watchOS contextual relevance uses `WidgetRelevance([WidgetRelevanceAttribute(...)])`.",
         "Keeps ActivityKit, App Intents, and APNs details limited to handoff boundaries that affect the widget note."
       ]
+    },
+    {
+      "id": 3,
+      "name": "stale-widget-host-closed-diagnosis",
+      "prompt": "A physical iPhone widget updates only after its host app opens. The sender reports APNs HTTP 200. Diagnose the development build without using the host app as a refresh workaround, and state what evidence is required before changing timeline or CloudKit code.",
+      "expected_output": "A fail-closed WidgetKit diagnosis that checks Developer Mode first, keeps the host closed, splits delivery from provider pull and rendering, compares durable hashes, and requires live Home Screen proof.",
+      "files": [],
+      "expectations": [
+        "Checks Settings > Developer > Widget Testing > WidgetKit Developer Mode first and labels it development-only rather than production-budget proof.",
+        "Keeps the iPhone host closed while triggering one real data revision.",
+        "Separates APNs acceptance, provider timeline wake, durable-state pull success, writer/provider hash parity, and visible rendering.",
+        "Does not diagnose timeline rendering when the writer and provider hashes differ.",
+        "Requires a live Home Screen update without opening the host; rejects APNs 200 and foreground reloadTimelines as acceptance."
+      ]
     }
   ]
 }
