@@ -5,6 +5,9 @@ description: "Implement, review, or improve WidgetKit widgets and controls. Use 
 
 # WidgetKit
 
+> **Self-validate after edits.** Run the skill-creator quick validator and
+> Markdown lint on this skill.
+
 Build home screen widgets, Lock Screen widgets, Control Center controls, and
 StandBy or CarPlay widget surfaces for iOS 26+.
 
@@ -97,55 +100,17 @@ Run through the Review Checklist at the end of this document.
 ### Widget
 
 Every widget conforms to the `Widget` protocol and returns a `WidgetConfiguration`
-from its `body`.
-
-```swift
-struct OrderStatusWidget: Widget {
-    let kind: String = "OrderStatusWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: OrderProvider()) { entry in
-            OrderWidgetView(entry: entry)
-        }
-        .configurationDisplayName("Order Status")
-        .description("Track your current order.")
-        .supportedFamilies([.systemSmall, .systemMedium])
-    }
-}
-```
+from `body`, including its display metadata and supported families.
 
 ### WidgetBundle
 
-Use `WidgetBundle` to expose multiple widgets from a single extension.
-
-```swift
-@main
-struct MyAppWidgets: WidgetBundle {
-    var body: some Widget {
-        OrderStatusWidget()
-        FavoritesWidget()
-        DeliveryActivityWidget()   // ActivityConfiguration handoff
-        QuickActionControl()       // Control Center
-    }
-}
-```
+Use one `@main WidgetBundle` to expose widgets, Live Activity configurations,
+and controls from an extension.
 
 ## Configuration Types
 
 Use `StaticConfiguration` for non-configurable widgets. Use `AppIntentConfiguration`
 (recommended) for configurable widgets paired with `AppIntentTimelineProvider`.
-
-```swift
-// Static
-StaticConfiguration(kind: "MyWidget", provider: MyProvider()) { entry in
-    MyWidgetView(entry: entry)
-}
-// Configurable
-AppIntentConfiguration(kind: "ConfigWidget", intent: SelectCategoryIntent.self,
-                       provider: CategoryProvider()) { entry in
-    CategoryWidgetView(entry: entry)
-}
-```
 
 ### Shared Modifiers
 
@@ -158,93 +123,16 @@ AppIntentConfiguration(kind: "ConfigWidget", intent: SelectCategoryIntent.self,
 
 ## TimelineProvider
 
-For static (non-configurable) widgets. Uses completion handlers. Three required
-methods:
-
-```swift
-struct WeatherProvider: TimelineProvider {
-    typealias Entry = WeatherEntry
-
-    func placeholder(in context: Context) -> WeatherEntry {
-        WeatherEntry(date: .now, temperature: 72, condition: "Sunny")
-    }
-
-    func getSnapshot(
-        in context: Context,
-        completion: @escaping (WeatherEntry) -> Void
-    ) {
-        let entry = context.isPreview
-            ? placeholder(in: context)
-            : WeatherEntry(
-                date: .now,
-                temperature: currentTemp,
-                condition: currentCondition
-            )
-        completion(entry)
-    }
-
-    func getTimeline(
-        in context: Context,
-        completion: @escaping (Timeline<WeatherEntry>) -> Void
-    ) {
-        Task {
-            let weather = await WeatherService.shared.fetch()
-            let entry = WeatherEntry(
-                date: .now,
-                temperature: weather.temp,
-                condition: weather.condition
-            )
-            let nextUpdate = Calendar.current.date(
-                byAdding: .hour,
-                value: 1,
-                to: .now
-            )!
-            completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
-        }
-    }
-}
-```
+For static widgets, implement synchronous `placeholder(in:)`, fast
+`getSnapshot(in:completion:)`, and live-data
+`getTimeline(in:completion:)`.
 
 ## AppIntentTimelineProvider
 
 For configurable widgets. Uses async/await natively. Receives user intent
 configuration.
-
-```swift
-struct CategoryProvider: AppIntentTimelineProvider {
-    typealias Entry = CategoryEntry
-    typealias Intent = SelectCategoryIntent
-
-    func placeholder(in context: Context) -> CategoryEntry {
-        CategoryEntry(date: .now, categoryName: "Sample", items: [])
-    }
-
-    func snapshot(
-        for config: SelectCategoryIntent,
-        in context: Context
-    ) async -> CategoryEntry {
-        let items = await DataStore.shared.items(for: config.category)
-        return CategoryEntry(
-            date: .now,
-            categoryName: config.category.name,
-            items: items
-        )
-    }
-
-    func timeline(
-        for config: SelectCategoryIntent,
-        in context: Context
-    ) async -> Timeline<CategoryEntry> {
-        let items = await DataStore.shared.items(for: config.category)
-        let entry = CategoryEntry(
-            date: .now,
-            categoryName: config.category.name,
-            items: items
-        )
-        return Timeline(entries: [entry], policy: .atEnd)
-    }
-}
-```
+Implement `placeholder(in:)`, async `snapshot(for:in:)`, and async
+`timeline(for:in:)`, reading the supplied intent configuration.
 
 ## Widget Families
 
@@ -280,35 +168,11 @@ Use `Button` and `Toggle` with intent types available to the widget extension or
 shared code. WidgetKit owns the view placement; `app-intents` owns intent
 modeling and behavior.
 
-```swift
-struct InteractiveWidgetView: View {
-    let entry: FavoriteEntry
-
-    var body: some View {
-        Button(intent: ToggleFavoriteIntent(itemID: entry.itemID)) {
-            Image(systemName: entry.isFavorite ? "star.fill" : "star")
-        }
-    }
-}
-```
-
 ## ActivityConfiguration Handoff
 
 WidgetKit registers Live Activity surfaces in the widget extension. Keep this
 section to registration and rendering handoff; use `activitykit` for
 `ActivityAttributes`, lifecycle, push updates, and full Dynamic Island patterns.
-
-```swift
-struct DeliveryActivityWidget: Widget {
-    var body: some WidgetConfiguration {
-        ActivityConfiguration(for: DeliveryAttributes.self) { context in
-            DeliveryLiveActivityView(context: context)
-        } dynamicIsland: { context in
-            DeliveryDynamicIsland(context: context)
-        }
-    }
-}
-```
 
 ## Control Center Widgets (iOS 18+)
 
@@ -316,59 +180,10 @@ WidgetKit owns control configuration, placement, kind, display name, push
 handler, and extension registration. Control actions and value intents belong in
 `app-intents`.
 
-```swift
-struct OpenCameraControl: ControlWidget {
-    var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "OpenCamera") {
-            ControlWidgetButton(action: OpenCameraIntent()) {
-                Label("Camera", systemImage: "camera.fill")
-            }
-        }
-        .displayName("Open Camera")
-    }
-}
-
-struct FlashlightControl: ControlWidget {
-    var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(
-            kind: "Flashlight",
-            provider: FlashlightValueProvider()
-        ) { value in
-            ControlWidgetToggle(isOn: value, action: ToggleFlashlightIntent()) {
-                Label(
-                    "Flashlight",
-                    systemImage: value
-                        ? "flashlight.on.fill"
-                        : "flashlight.off.fill"
-                )
-            }
-        }
-        .displayName("Flashlight")
-    }
-}
-```
-
 ## Lock Screen Widgets
 
-Use accessory families and `AccessoryWidgetBackground`.
-
-```swift
-struct StepsWidget: Widget {
-    let kind = "StepsWidget"
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: StepsProvider()) { entry in
-            ZStack {
-                AccessoryWidgetBackground()
-                VStack {
-                    Image(systemName: "figure.walk")
-                    Text("\(entry.stepCount)").font(.headline)
-                }
-            }
-        }
-        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
-    }
-}
-```
+Use accessory families and `AccessoryWidgetBackground`; test their rendering
+without relying on full color.
 
 ## StandBy Mode
 
