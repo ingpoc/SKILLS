@@ -168,6 +168,21 @@ Use `Button` and `Toggle` with intent types available to the widget extension or
 shared code. WidgetKit owns the view placement; `app-intents` owns intent
 modeling and behavior.
 
+When an App Intent writes widget navigation state to App Group `UserDefaults`
+and immediately reloads timelines, treat that as a cross-process handoff:
+persist before `reloadTimelines` and verify the selected state survives a later
+provider refresh. Do not add `synchronize()` by default; if a reproduced race
+requires it, keep it inside the save helper and cover the later refresh.
+
+Provider context does not identify why a timeline was requested, and one tap
+can trigger multiple provider calls. If the provider also performs remote
+catch-up, store a short, non-consuming local-navigation deadline and bypass
+remote retries for every request inside that window; return an entry at the
+deadline so catch-up resumes promptly. Never route local interaction through a
+remote settle loop or fixed sleeps. An immediate filesystem copy of an App
+Group preferences plist can lag live `cfprefsd` state, so a page mismatch is
+not authoritative interaction readback.
+
 ## ActivityConfiguration Handoff
 
 WidgetKit registers Live Activity surfaces in the widget extension. Keep this
@@ -371,6 +386,10 @@ opening the app, CarPlay integration.
 16. **Trusting SwiftUI shape fills for status color under glass.** Home Screen
     Liquid Glass remaps fills; a green/yellow/red `Circle().fill` can wash out.
     Use raster + `.fullColor` and a shape channel when chrominance is semantic.
+
+17. **Announcing decorative status glyphs twice.** If adjacent text or the
+    combined row owns the accessible status, hide the decorative icon from
+    accessibility so stale or duplicate announcements cannot disagree.
 
 ## Review Checklist
 
