@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Sites"
+  short_description: "Design evidence-led premium product sites"
+  default_prompt: "Use $product-sites to design and build a premium evidence-led product site."
