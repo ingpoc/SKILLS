@@ -3,10 +3,11 @@
 ## Contents
 
 1. Proof inventory
-2. Presentation versus evidence
-3. Figure construction
-4. Responsive rules
-5. Verification ledger
+2. Capture-to-render grounding
+3. Presentation versus evidence
+4. Figure construction
+5. Responsive rules
+6. Verification ledger
 
 ## Proof inventory
 
@@ -20,8 +21,38 @@ Before concepting, list each asset with:
 | Native size | Pixel dimensions and aspect ratio |
 | Readable content | Title, state, rows, labels, or values that must survive |
 | Risk | Clipping, stale state, noise, private data, or unsupported inference |
+| Publish policy | Publishable asset or grounding reference only |
+| Coverage | Product surfaces and states the final image may depict |
+| Baseline | Prior accepted version or viewport when comparison is required |
 
 Do not let a marketing treatment silently widen the claim.
+
+## Capture-to-render grounding
+
+Every product site starts with a fresh screenshot of the current,
+customer-visible product. Capture each additional surface or state that the
+polished marketing image will depict. If the product cannot be run and
+captured, do not generate a substitute that implies otherwise.
+
+Use the real captures as grounding references for `imagegen`. A polished
+render may improve crop, composition, lighting, canvas, and presentation, but
+it must preserve the observed product identity, information architecture,
+representative content, and named surfaces/states. Remove private data and
+incidental system or debug chrome. Do not invent a platform, feature, state, or
+claim absent from the grounding packet.
+
+Inspect the generated result before implementation. Confirm:
+
+- every depicted surface/state maps to a real capture;
+- required product identity and customer-readable content survived;
+- the chosen canvas/background treatment is intentional;
+- matte edges, color temperature, and crop integrate with the site rather than
+  making the image look pasted onto it;
+- image and typography scale remain consistent with any cited accepted
+  version.
+
+The source screenshots may remain reference-only when the presentation policy
+requires generated imagery on the published site.
 
 ## Presentation versus evidence
 
@@ -93,6 +124,11 @@ Record at least:
 | Exact complaint viewport | Fresh live screenshot |
 | Wide desktop | Fresh live screenshot |
 | Narrow mobile | Fresh live screenshot(s) covering the sequence |
+| Real capture provenance | Current source screenshot for each depicted surface/state |
+| Capture-to-render coverage | Source/render comparison |
+| Generated asset used | DOM plus live visual confirmation |
+| Media integration | Canvas edge, background, crop, and scale inspection |
+| Prior-version regression | Side-by-side comparison when the user cites a baseline |
 | Caption ownership | DOM or visual confirmation |
 | Raster text readability | 100% zoom inspection |
 | Claim boundary | Copy compared to proof type |

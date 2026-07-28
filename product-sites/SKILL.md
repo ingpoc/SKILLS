@@ -1,9 +1,11 @@
 ---
 name: product-sites
-description: Design and direct premium product, SaaS, app, portfolio, and launch sites with a clear product story, high data-ink ratio, credible product proof, responsive evidence composition, and purposeful GSAP motion. Use for new product landing pages, major site redesigns, screenshot-led product storytelling, DRAMS/Tufte-inspired web layouts, or when a site must feel distinctly high-taste rather than template-generated. Coordinate with frontend-app-builder for concept-to-code implementation and with Sites for setup, runtime, and deployment; do not replace either owner.
+description: Design and direct premium product, SaaS, app, portfolio, and launch sites with a clear product story, high data-ink ratio, grounded polished product imagery, responsive evidence composition, purposeful GSAP motion, and independent customer UI/UX acceptance. Use when creating or materially redesigning a product site. Coordinate with frontend-app-builder for concept-to-code implementation, imagegen for capture-grounded product imagery, review-customer-ui-ux for the final review loop, and Sites for setup, runtime, and deployment; do not replace those owners.
 ---
 
 # Product Sites
+
+> **Self-validate after edits.** Run the local `create-skill` audit.
 
 Create a product site that makes one promise clear, proves it honestly, and
 feels intentionally art-directed at every viewport.
@@ -14,22 +16,25 @@ This skill owns:
 
 - product narrative and section rhythm;
 - the taste thesis and editing decisions;
+- the real-capture-to-polished-render grounding contract;
 - proof credibility and screenshot/render treatment;
 - web-specific data-ink discipline;
 - responsive proof composition;
-- the motion brief and GSAP choreography.
+- the motion brief and GSAP choreography;
+- final customer UI/UX review admission and closeout.
 
 It does not own:
 
 - visual concept generation, design-system extraction, frontend code, or
   fidelity mechanics: use `build-web-apps:frontend-app-builder`;
-- image generation mechanics: follow `imagegen` through the frontend builder;
+- image generation mechanics: use `imagegen` through the frontend builder;
+- platform-specific screenshot mechanics: use the current browser, simulator,
+  device, or native-app owner;
 - DRAMS tokens/components: use `drams-design` only when DRAMS is explicitly
   requested or already owns the product;
 - Sites initialization, storage, source publishing, access, or deployment: use
   `sites:sites-building` and `sites:sites-hosting`;
-- independent customer review: use `review-customer-ui-ux` when requested or
-  when release confidence depends on a blind review.
+- independent customer review mechanics: use `review-customer-ui-ux`.
 
 No separate `taste` skill is required. This skill is the product-site taste
 layer; do not add a second taste checklist when one becomes available.
@@ -58,6 +63,10 @@ Write a compact brief before design:
 - one-sentence promise;
 - proof inventory, with each item marked `real capture`, `measured evidence`,
   `generated product render`, or `unsupported`;
+- presentation asset policy (`real`, `generated`, or `mixed`), including
+  whether source captures are reference-only or publishable;
+- required product surfaces and states, plus any prior accepted
+  version/viewport the user asks to preserve or compare;
 - claims the available evidence cannot support;
 - required sections, routes, and exact user-supplied copy;
 - the user's art direction and target viewport, if supplied.
@@ -65,7 +74,24 @@ Write a compact brief before design:
 Delete unsupported claims. A polished render may explain a product, but it
 must not masquerade as runtime or synchronization proof.
 
-### 2. Choose one design thesis
+### 2. Capture the real product
+
+Before concepting marketing imagery or implementing the page:
+
+- open the current product and capture at least one fresh, real screenshot of
+  its primary customer-visible state;
+- capture every additional surface or state that the marketing imagery will
+  claim or depict;
+- record the product identity, hierarchy, representative content, state, and
+  details the polished render must preserve;
+- exclude credentials, private data, unrelated system chrome, and stale or
+  debug-only state.
+
+Treat these screenshots as the grounding packet. They may be reference-only.
+If the product cannot be run and captured, stop and report the missing
+prerequisite; do not fabricate a substitute product.
+
+### 3. Choose one design thesis
 
 Define:
 
@@ -81,7 +107,7 @@ Reject concepts that depend on generic card walls, bento grids, gradient glow,
 floating dashboard chrome, decorative pills, fake metrics, or empty space that
 does not improve hierarchy.
 
-### 3. Build the narrative
+### 4. Build the narrative
 
 Prefer this sequence, changing it only when the product requires another:
 
@@ -96,17 +122,27 @@ Vary section density, alignment, and image-to-text ratio. Preserve one gutter,
 type system, color lock, and media grammar so the page feels continuous rather
 than assembled from templates.
 
-### 4. Hand the visual build to the frontend owner
+### 5. Generate grounded product imagery, then build
 
 Invoke `build-web-apps:frontend-app-builder` with the truth brief, narrative,
-thesis, copy inventory, proof inventory, target viewports, and motion brief.
-Follow its Image Gen, concept approval, implementation, Browser/IAB, and
+thesis, copy inventory, grounding packet, proof inventory, target viewports,
+and motion brief.
+
+During its concept phase, invoke `imagegen` with the real screenshots labeled
+as grounding references. Generate, inspect, and save at least one high-quality
+polished product image, then use that asset on the site. It must preserve the
+observed product identity and required surfaces/states, remove incidental
+capture noise, avoid unsupported features or claims, and follow the chosen
+background/canvas treatment. A generated derivative remains a product render,
+not runtime evidence.
+
+Follow the frontend owner's concept approval, implementation, Browser/IAB, and
 fidelity requirements exactly.
 
 Do not duplicate its component architecture, coding, image-generation, or
 browser-verification instructions here.
 
-### 5. Compose proof before decoration
+### 6. Compose proof before decoration
 
 For each visual proof:
 
@@ -117,10 +153,12 @@ For each visual proof:
 - make source-to-output relationships explicit with position, labels, or a
   connector;
 - remove rails, watermarks, borders, and empty canvas that encode no state;
+- integrate generated imagery intentionally with the page background; reject
+  accidental matte edges, canvas seams, or a pasted-poster appearance;
 - use real captures when credibility is the job and polished generated renders
   when presentation is the job.
 
-### 6. Add motion after layout is stable
+### 7. Add motion after layout is stable
 
 Write the motion brief before GSAP code. Each animation must clarify entry,
 hierarchy, causality, continuity, or state. If its purpose cannot be named,
@@ -130,7 +168,7 @@ Use GSAP only when requested, already installed, or clearly justified. Keep
 semantic HTML and the static layout complete without JavaScript. Respect
 `prefers-reduced-motion`.
 
-### 7. Verify the customer-visible result
+### 8. Verify the customer-visible result
 
 In addition to the frontend builder's fidelity gate:
 
@@ -140,12 +178,25 @@ In addition to the frontend builder's fidelity gate:
 - confirm captions remain attached to their evidence;
 - confirm text inside raster product renders remains readable;
 - confirm generated imagery is not described as live evidence;
+- confirm the generated asset covers the required surfaces/states and remains
+  faithful to its real capture packet;
+- compare media scale, typography scale, section density, and canvas treatment
+  with any prior accepted version the user cited;
 - confirm motion has no scroll-jacking, layout shift, or reduced-motion defect;
 - compare the live capture against the concept/reference before claiming done.
 
-For a blind review, provide frozen screenshots and one exact source
-fingerprint. Do not leak intended fixes to reviewers. A release-quality pass
-has no open P0-P2 customer-visible findings.
+### 9. Review, implement, and re-review
+
+After the site passes implementation fidelity and before Sites handoff, invoke
+`review-customer-ui-ux` in artifact-review mode on frozen desktop/mobile
+evidence and one exact product-source fingerprint.
+
+Implement the reconciled recommendations through the frontend owner, then
+follow the review skill's acceptance-check and fresh blind UI+UX re-review loop
+until dual Pass or its documented stop condition. Any source change invalidates
+the prior review fingerprint. Do not brief fresh reviewers with prior findings
+or fix history, and do not publish an unreviewed replacement as the accepted
+version.
 
 ## Acceptance
 
@@ -156,13 +207,18 @@ Ship only when:
 - every section advances the story or earns its proof;
 - decorative ink is subordinate to information ink;
 - proof is readable, labeled, and honest;
+- a fresh real-product grounding packet exists and its polished generated
+  derivative is used on the site;
 - desktop and mobile express the same hierarchy without clipping or memory
   burden;
 - motion improves comprehension and disappears safely when reduced;
+- the current source fingerprint has completed the
+  `review-customer-ui-ux` implement/re-review loop;
 - no fixable agency-review comment remains.
 
 ## Handoff
 
 If `.openai/hosting.json` exists or Sites was requested, hand the validated
-source to Sites and let Sites own publishing. Report the live URL and any
-intentional evidence or access limitation without deployment internals.
+and reviewed source fingerprint to Sites and let Sites own publishing. Report
+the live URL and any intentional evidence or access limitation without
+deployment internals.
