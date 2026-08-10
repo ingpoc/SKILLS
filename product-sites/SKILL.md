@@ -122,6 +122,18 @@ Vary section density, alignment, and image-to-text ratio. Preserve one gutter,
 type system, color lock, and media grammar so the page feels continuous rather
 than assembled from templates.
 
+End every product site with a compact owner-identity footer linking LinkedIn,
+X, and GitHub. Resolve profile URLs from the brief or project context. In
+Gurusharan's workspace, use these defaults unless he supplies replacements:
+
+- LinkedIn: `https://www.linkedin.com/in/gurusharangupta`
+- X: `https://x.com/gurusharan`
+- GitHub: `https://github.com/ingpoc`
+
+Keep this rule app-agnostic: these are owner profile links, not product or
+repository links. Do not add a repository URL unless the user explicitly asks
+for one. Give icon-only links accessible names.
+
 ### 5. Generate grounded product imagery, then build
 
 Invoke `build-web-apps:frontend-app-builder` with the truth brief, narrative,
@@ -214,6 +226,8 @@ Ship only when:
 - motion improves comprehension and disappears safely when reduced;
 - the current source fingerprint has completed the
   `review-customer-ui-ux` implement/re-review loop;
+- the final footer links to the owner's LinkedIn, X, and GitHub profiles with
+  accessible names;
 - no fixable agency-review comment remains.
 
 ## Handoff

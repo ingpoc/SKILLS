@@ -24,6 +24,26 @@ Use evidence in this order:
 
 Lower sources never override higher sources. A commit, file, stale checkpoint, or past-session claim is not completion proof by itself.
 
+## Operator DNA
+
+Evidence basis: a 2026-07-10 through 2026-07-17 read-only analysis of 281 local
+Codex sessions across 13 project roots, filtered to 1,451 user-authored prompt
+records and 496 unique prompt texts. These are cross-project defaults for
+judgment, not authority. Current explicit instructions, repository owners, live
+evidence, and the boundaries in Source precedence always win. Normal runs must
+not remine history to apply them.
+
+| Priority | Default behavior |
+|---|---|
+| Product completion | Resolve the product plan, implementation status, and acceptance owners; say what is already proven and map the remaining exit gates. Optimize for customer-visible product progress, not activity or file counts. |
+| First-principles judgment | Challenge requirements that do not improve usefulness, intuitive experience, quality, security, safety, or ease of use. Preserve model judgment for ambiguous product and architecture choices instead of keyword routing. |
+| Goal shape and persistence | Select the smallest full-lifecycle goal that materially advances the plan. Keep implementation, proof, cleanup, and required promotion together; continue autonomously until its evidence passes, a true impasse exists, or an authority/phase boundary is reached. |
+| Current truth | Prefer owner files, current code, and runtime readback over prose or old sessions. Use history only to locate a missing route or repeated learning, never to declare current completion. |
+| Proof-layer honesty | Prove the actual claimed target. Distinguish source/build, local deterministic, rendered/runtime, and deployed customer proof; compare visual work to its reference and test locally before deployment when both layers apply. |
+| Durable learning | Repeated friction belongs in the narrowest script, lint, hook, skill, workflow, or ledger owner. Fix that owner, delete displaced routes or advice, and leave future agents a reproducible path rather than a chat-only reminder. |
+| Efficient execution | Improve quality, reliability, token use, context, and time together. Measure first. Use bounded cheaper agents for broad independent exploration when the treatment repays its overhead; keep integration, blocking decisions, and ambiguous judgment on the main thread. A first migration may justify a bounded current-state explorer; resumed deterministic work does not. |
+| Reporting and authority | Lead with the actual outcome, remaining gap, exact blocker, and next owned action. Do not stop for a recap, role switch, or status question. Autonomy never grants spend, deployment, external-send, destructive, authentication, secret, signed-release, or new-phase authority. |
+
 ## Entry lane
 
 1. Resolve both roots once: `export SESSION_ORCHESTRATE_ROOT="$(git rev-parse --show-toplevel)" SESSION_ORCHESTRATE_SKILL="${CODEX_HOME:-$HOME/.codex}/skills/session-orchestrate"`. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/entry.py" --compact --root "$SESSION_ORCHESTRATE_ROOT"` once; when an authorized successor prompt supplies a nonce, add `--claim-nonce <nonce>`. The explicit root must be the caller's current Git product repository. Entry returns checkpoint eligibility, chain consistency, compact owner/status inventory, `orchestration_action`, and a stable `route_receipt`. Reuse the receipt until one of its named invalidators changes. Never pipe a goal through `jq`, command substitution, or an improvised temporary-file rewrite.
@@ -41,15 +61,28 @@ Lower sources never override higher sources. A commit, file, stale checkpoint, o
 | Action | Meaning | Main-agent decision |
 |---|---|---|
 | `skip` | Program state is fresh, blocked, complete, or otherwise answerable through narrow deterministic reads | Do not spawn a scanner. |
-| `first-migration` | No source-backed program map exists yet | Use `explorer` only when owner plus implementation state is broader than one or two deterministic reads. |
+| `first-migration` | No source-backed program map exists yet | Consider delegation only when owner plus implementation state is broader than one or two deterministic reads. |
 | `stale-rebuild` | A source fingerprint or generated projection invalidated an existing map | Read the changed owner slice first; delegate only when rebuilding requires a broad implementation-state comparison. |
 | `conflict` | Checkpoint, chain, or program state contradicts another mechanical owner | Use a sidecar only for separable evidence gathering; keep conflict resolution and goal choice on the main thread. |
 
-When delegation is justified, request the configured `explorer` role. Its TOML owns the read-only sandbox and compact-output contract while model and reasoning remain runtime-selected. Pass only the task-specific owner paths, exclusions, bounds, and exact deliverable. Require compact scan metrics, three to seven findings, duplicate findings, unknowns, and evidence references. Session history remains off unless explicitly needed and is capped at three relevant sessions.
+`exploration.action` identifies an evidence need, not an agent type. When it is not `skip`, load `codex-routing-policy` for the lane, `subagent-playbook` for the callable agent type, and `codex-efficient-delegation` for the direct-versus-delegate gate and treatment bounds. Work directly when the scan is small, blocking, tightly coupled, or duplicates main-thread retrieval. Pass only the task-specific owner paths, exclusions, bounds, and exact deliverable. Session history remains off unless explicitly needed and is capped at three relevant sessions.
 
 If the callable spawn surface cannot select the configured `explorer`, do not claim its role contract was used. Work directly when the scan is small. An honestly labeled generic read-only sidecar is acceptable only when context isolation still has measured value. Do not launch recursive `codex exec` as an automatic fallback.
 
 Collect the existing sidecar result before closing it. If a completion notification loses the payload, inspect or recover that agent result before retrying; never repeat a broad scan by default. Persist only main-agent-validated states (`proven`, `present_unverified`, `absent`, or `unknown`) and evidence references, never the raw transcript.
+
+### Choose the execution container
+
+Goal selection and execution-container selection are separate decisions:
+
+| Container | Use only when |
+|---|---|
+| Current task | Default; one or two deterministic steps, the blocking implementation or decision, or tightly coupled judgment. |
+| Bounded subagent | The same goal has an independent, owner-bounded outcome with compact proof, current-state recheck, and useful non-overlapping main-thread work. Let the routing/delegation owners choose `explorer`, `worker`, verifier, or complete-outcome reviewer. |
+| Same-goal successor | Context is genuinely exhausted, a compaction boundary requires a fresh task, or the operator explicitly requests a new task. Pause the source Codex goal before preparing the handoff. |
+| Next-goal successor | The current goal is completed with accepted evidence and the owner plan admits a materially different acceptance gap. Complete the source Codex goal before preparing the handoff. |
+
+Tester/fixer/retester roles, proof continuation, deployment stages, and cleanup are not goal or successor boundaries. Keep the blocking step on the main thread unless a repository owner explicitly requires isolated role ownership with a disjoint write scope; then use one bounded worker and return to the same goal. Fresh customer, UI/UX, accessibility, or operator judgment uses the `codex-efficient-delegation` complete-outcome review variant—never page-, control-, or checklist-sized agents.
 
 ### Checkpoint decisions
 
@@ -66,6 +99,12 @@ If no product/roadmap owner exists, use an explicit current user objective as th
 ### Active chain review
 
 Read `goal_detail_argv`, compare `route_receipt.current_goal_id`, the selected program goal, its status, and any unfinished Codex goal. If all identities match and the acceptance gap still fails, continue the same hop; never initialize a second chain. If an older state lacks `current_goal_id`, reconcile the chain hash and selected goal once, then bind the id through `set-goal`. Stop on a genuine identity conflict.
+
+When entry reports `execute-pending-command`, execute only the returned command,
+then immediately call `consume-command` with its exact hash and truthful result.
+When it reports `resume-proof-campaign`, use the retained proof-owner packet;
+do not rebuild the program map, mine history, increment a terminal blocker, or
+create a successor.
 
 ### Closed chain review
 
@@ -152,7 +191,59 @@ Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file> -
 7. Complete implementation and migrations before final rendered/runtime acceptance. If source changes afterward, invalidate only affected evidence and rerun it.
 8. Continue until the stop conditions pass, a true impasse occurs, or an authority/phase boundary is reached.
 
+### Freeze before expensive acceptance
+
+Do not enter repeated capture or blind-review loops while the behavioral contract
+or proof owner is still changing. Before final rendered or independent acceptance:
+
+1. Freeze the owner-backed acceptance rubric, including positive and applicable
+   negative/recovery outcomes.
+2. Review the semantic proof contract first. A dispatched action, preview flag,
+   build, or screenshot cannot substitute for the claimed visible or persisted
+   postcondition.
+3. Finish the coherent source batch and retain cheap targeted proof that the
+   proof owner fails closed.
+4. Create one immutable artifact root keyed by the current product fingerprint,
+   then record readiness:
+
+```bash
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" freeze-proof \
+  --product-fingerprint "<current product source fingerprint>" \
+  --acceptance-contract "<owner section or compact rubric reference>" \
+  --proof-owner "<repository proof route>" \
+  --artifact-root "<immutable fingerprint-keyed evidence root>" \
+  --evidence "<semantic proof-contract review or targeted proof>"
+```
+
+Run the expensive build/capture campaign once from that frozen source. Give one
+frozen packet to the repository's independent-review owner. Consolidate all
+reviewers' P0-P2 findings before one coherent fix batch; do not spawn a new review
+pair for each finding. Any later source mutation invalidates the freeze: run
+`freeze-proof` again after targeted repair. The helper records source freezes,
+post-freeze mutations, proof reruns, and final review cycles in chain metrics.
+
 ## Closeout lane
+
+Record every material proof generation before using it for completion:
+
+```bash
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-proof \
+  --scope "<owner-defined acceptance surface>" \
+  --proof-status pass \
+  --product-fingerprint "<current product source fingerprint>" \
+  --proof-environment-fingerprint "<runner/runtime fingerprint when relevant>" \
+  --result "<concise exact result>" \
+  --evidence "<retained artifact path or stable id>"
+```
+
+A final rendered or independent acceptance generation adds
+`--final-acceptance`. The helper rejects it unless its product fingerprint and
+evidence match the current frozen readiness packet.
+
+A new generation supersedes only the same scope. Product source and proof
+environment remain separate so a runner repair does not pretend the product
+changed, while older runner-dependent proof cannot silently remain current.
+Use the returned generation id in completion evidence.
 
 ### Completed goal
 
@@ -162,7 +253,7 @@ Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/validate_goal.py" <goal-file> -
 4. Call `update_goal complete`.
 5. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy reference-only --next-action "<next program-map decision>" --verification "<proof summary>"`.
 6. Refresh only the implementation evidence affected by the completed goal. Rebuild the map only when an owner-source fingerprint changed; otherwise mark and select in the existing map. Run the admission probe on the next candidate. Stop when it reconciles to product/phase completion, crosses an authority boundary, or the chain reached `max_hops`.
-7. Otherwise write and validate the exact next objective, then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind next-goal --next-goal-id <next-goal-id> --next-objective-file <next-goal-file> --next-delivery-unit <delivery-unit> --first-command "<exact first command>"`. Never spawn after reconciliation-only work.
+7. Otherwise write and validate the exact next objective, then run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind next-goal --reason completed-goal --source-goal-state completed --completion-evidence "<accepted current-goal proof>" --next-goal-id <next-goal-id> --next-objective-file <next-goal-file> --next-delivery-unit <delivery-unit> --first-command "<exact first command>"`. Never spawn after reconciliation-only work.
 
 ### Unfinished handoff
 
@@ -170,7 +261,8 @@ Use only after actual automatic compaction or when another task is required to f
 
 1. Keep the active goal unfinished.
 2. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/checkpoint.py" --goal-file <goal-file> --resume-policy ensure-active --next-action "<exact first action>" --blocker "<specific blocker>" --verification "<completed and pending proof>"`.
-3. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind continue-goal --first-command "<exact first command>"`.
+3. Call `update_goal paused` so the source task cannot resume implementation after transfer.
+4. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" prepare-handoff --kind continue-goal --reason <context-exhausted|compaction-boundary|operator-requested-task> --source-goal-state paused --first-command "<exact first command>"`. A role change, review, fix, retest, or proof continuation does not qualify for this lane.
 
 ### Awaiting authority
 
@@ -179,19 +271,48 @@ Use this for authentication, deployment, spend, secrets, destructive operations,
 1. Checkpoint the exact unfinished goal with `ensure-active`.
 2. Run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" await-authority --goal-file <goal-file> --reason "<specific gate>" --next-command "<first authorized command>"`.
 3. Stop without marking the goal or chain blocked. Status questions, authentication handoffs, and operator repair prompts do not count toward repeated-blocker thresholds.
+
+### Proof campaign pause
+
+Use this when a repository-owned verification campaign exhausts its bounded
+recovery but the exact product goal is still actionable. First consume the
+attempted command with result `blocked`, then persist the blocker:
+
+```bash
+python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" pause-proof \
+  --owner "<proof owner>" --scope "<acceptance surface>" \
+  --reason "<exact observed blocker>" \
+  --next-command "<first owner diagnostic or rerun command>" \
+  --product-fingerprint "<current product source fingerprint>" \
+  --proof-environment-fingerprint "<current runner/runtime fingerprint>" \
+  --evidence "<retained blocker artifact>" --recovery-used
+```
+
+This records a blocked proof generation and changes the chain to
+`proof_blocked`; it does not consume a hop, authorize another phase, create a
+successor, or count as terminal goal blockage. After the proof owner is repaired
+and independently checked, run `resume-proof --reason "<repair evidence>"`.
+Execute its returned command once and consume its hash. If the same blocker
+persists, update the same scoped proof packet rather than reopening discovery.
 4. After explicit authority, run `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" resume-authority --reason "<authority supplied>"`, then continue the same goal and hop from the returned `goal_file`.
 
 ### Create one successor
 
-Continue only when `prepare-handoff` returns `spawn_allowed: true`.
+This is continuity transfer, not subagent delegation. Use it only after the execution-container decision selects a successor.
 
-1. Match the exact current repository root to a Codex project.
-2. Create exactly one same-project successor task.
-3. Use this prompt:
+An explicit `$session-orchestrate` invocation or explicit successor-task request is the user request required by `codex_app__create_thread`. Do not request separate confirmation after `prepare-handoff` returns `spawn_allowed: true`; apply the zero-successor conditions from Hard rule 3.
+
+1. For `continue-goal`, checkpoint the exact objective and pause the source Codex goal. Prepare with `--reason context-exhausted|compaction-boundary|operator-requested-task --source-goal-state paused`.
+2. For `next-goal`, record current-goal completion, call `update_goal` with `complete`, and prepare with `--reason completed-goal --source-goal-state completed --completion-evidence <accepted-proof>`.
+3. Continue only when `prepare-handoff` returns `spawn_allowed: true`; it rejects role-switch/retest handoffs and non-terminal source goals.
+4. Use `codex_app__list_projects` to match the exact current repository root, then use `codex_app__create_thread` to create exactly one same-project successor task. Do not substitute a subagent.
+5. Use this prompt:
 
    `This is an authorized session-orchestrate successor for chain <chain_id>, hop <pending_hop>/<max_hops>. Invoke $session-orchestrate with claim nonce <nonce>. Pass the nonce to entry; use its exact goal_file and first_command without plan, history, memory, or full-workflow discovery. Create at most one successor and pause the same goal at authority boundaries.`
-4. Record the task id with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
-5. End the current task. Do not continue implementation after spawning.
+6. Record the task id with `python3 "$SESSION_ORCHESTRATE_SKILL/scripts/chain_state.py" record-successor --nonce "<nonce>" --thread-id "<thread-id>"`.
+7. End the current task. The paused/completed source goal must not resume implementation after spawning.
+
+If task creation is unavailable or fails, leave the chain `handoff_pending`, retain the nonce and exact objective, report the exact failure, and do not prepare or create a duplicate successor.
 
 ## Negative scenarios
 
@@ -221,8 +342,13 @@ Continue only when `prepare-handoff` returns `spawn_allowed: true`.
 | No authoritative completion owner or explicit product objective | Stop for product-owner direction. |
 | Repository selector target disagrees with the selected goal | Reject the map and rebuild from the selector target; do not activate a structurally valid but stale goal. |
 | A mutable queue exposes future candidates | Persist only the exact admitted unfinished goal, then rerun the selector after completion; do not enumerate speculative queue goals. |
+| `.session` is stale or an active chain is orphaned | Rebuild `TRACKING.json` and `PLAN.md` in place from current owners. Preserve `CURRENT.md`, `ORCHESTRATION.json`, admitted/claimed goals, nonces, blockers, history, and successor ids; never recover by deleting `.session`. |
 | Past sessions disagree with current owner docs | Current owner docs and live evidence win. |
-| Configured `explorer` is unavailable on the callable spawn surface | Work directly or use an honestly labeled generic read-only sidecar only when it still has clear ROI. |
+| Delegation is considered | Route through `codex-routing-policy`, `subagent-playbook`, and `codex-efficient-delegation`; do not duplicate their agent-type matrix here. |
+| A tester/fixer/retester role change is proposed as a successor | Reject it. Work directly or use one bounded owner-isolated worker under the same goal. |
+| A successor is proposed while the source Codex goal is active | Pause it for `continue-goal`, or complete it with accepted evidence for `next-goal`, before preparing the handoff. |
+| Bare `$session-orchestrate` completes a goal and the next eligible goal returns `spawn_allowed: true` | Create exactly one same-project successor without asking again, then record its task id. |
+| Successor task creation is unavailable or fails | Preserve `handoff_pending` and the nonce, report the exact failure, and do not prepare a duplicate. |
 | Sidecar result notification lacks its payload | Recover the existing result before considering a retry; do not repeat the broad scan automatically. |
 | Sidecar reports file presence as completion | Record `present_unverified`; only accepted runtime or deterministic proof can establish `proven`. |
 | A phase repeatedly needs the same project-specific test, deploy, runtime, or recovery recipe | Prove it once, then update or create one repository-local skill and record it as the relevant lifecycle route; do not add the recipe to this global skill. |

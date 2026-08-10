@@ -7,12 +7,67 @@
 | `.session/TRACKING.json` | `session_workspace.py` | Canonical derived program state, source fingerprints, ordered goals, statuses, evidence, and selected goal. |
 | `.session/PLAN.md` | generated projection | Human-readable view of `TRACKING.json`; never edit directly. |
 | `.session/CURRENT.md` | `save-session` | Exact tactical checkpoint and resumability metadata. |
+| `.session/ADMITTED_GOAL.md` | `session-orchestrate` | Exact objective admitted before chain activation. |
 | `.session/CLAIMED_GOAL.md` | `chain_state.py` / `entry.py` | Private canonical objective materialized for an authorized claimed handoff or authority resume. |
-| `.session/ORCHESTRATION.json` | `chain_state.py` | Chain id, exact canonical objective and hash, hop bounds, nonce, authority pause, successor, metrics, and stop state. |
+| `.session/ORCHESTRATION.json` | `chain_state.py` | Chain id, exact canonical objective and hash, hop bounds, nonce, one-time command receipt, proof readiness, scoped generations, proof/authority pauses, successor, churn metrics, and stop state. |
 | `.session/WORKSPACE.lock` | `session_workspace.py` | Atomic program-state writes. |
 | `.session/ORCHESTRATION.lock` | `chain_state.py` | Atomic chain transitions. |
 
 The folder is private local agent state and is added to `.git/info/exclude`. Product plans, architecture documents, and durable customer-facing project decisions remain in their repository-declared owners.
+
+Execution mechanics are backward-compatible optional fields in
+`ORCHESTRATION.json`:
+
+```json
+{
+  "execution_owner_thread_id": "successor-thread-id-or-null",
+  "handoff": {
+    "kind": "continue-goal or next-goal",
+    "handoff_reason": "typed eligibility reason",
+    "source_goal_state": "paused or completed",
+    "completion_evidence": []
+  },
+  "pending_command": {
+    "command_hash": "sha256 without prefix",
+    "source": "handoff or proof-resume",
+    "consumed_at": null
+  },
+  "proof_current": {
+    "owner-defined-scope": "sha256:generation-id"
+  },
+  "proof_readiness": {
+    "readiness_id": "sha256:readiness-id",
+    "product_fingerprint": "product-source-v3",
+    "acceptance_contract": "owner section or compact rubric reference",
+    "proof_owner": "repository-owned semantic proof route",
+    "artifact_root": "evidence/acceptance/product-source-v3",
+    "evidence": ["evidence/proof-contract-review.json"]
+  },
+  "proof_generations": [
+    {
+      "generation_id": "sha256:generation-id",
+      "scope": "owner-defined-scope",
+      "status": "pass",
+      "product_fingerprint": "product-source-v3",
+      "proof_environment_fingerprint": "runner-v2",
+      "evidence": ["evidence/acceptance/product-source-v3/current-proof.json"],
+      "final_acceptance": true
+    }
+  ],
+  "metrics": {
+    "source_freezes": 1,
+    "post_freeze_source_mutations": 0,
+    "proof_reruns": 0,
+    "review_cycles": 1
+  },
+  "proof_blocker": null
+}
+```
+
+Only `chain_state.py` mutates these fields. `proof_current` selects the current
+generation per scope; older entries remain an audit trail with
+`superseded_at`/`superseded_by`. Raw logs, secrets, lease tokens, image bytes,
+and project-specific recovery recipes never enter orchestration state.
 
 ## Bootstrap and migration
 
@@ -23,6 +78,16 @@ python3 "$SESSION_ORCHESTRATE_SKILL/scripts/session_workspace.py" ensure --root 
 ```
 
 When `.session/` does not exist, `ensure` creates it with mode `0700`. Existing legacy `.claude/session-data/CURRENT.md` and `ORCHESTRATION.json` are copied byte-for-byte only when the canonical targets are absent. Legacy files are retained but never consulted after `.session/` exists.
+
+## In-place reconstruction
+
+Staleness never authorizes deleting `.session`. When entry returns
+`program_action: rebuild-plan`, regenerate only `TRACKING.json` and its `PLAN.md`
+projection with `sync`. Preserve `CURRENT.md`, `ORCHESTRATION.json`,
+`ADMITTED_GOAL.md`, `CLAIMED_GOAL.md`, nonces, blockers, proof history, successor
+ids, and command receipts. An orphaned active chain is reconciled against those
+preserved transactions before binding the selected rebuilt goal; it is not replaced
+with a fresh chain merely because a source fingerprint changed.
 
 ## Program input
 

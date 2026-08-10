@@ -1,4 +1,0 @@
-interface:
-  display_name: "Builder Design System"
-  short_description: "Apply the Builder dashboard design system"
-  default_prompt: "Use $builder-design-system to apply the Autonomous Agent Builder design system to this dashboard surface."

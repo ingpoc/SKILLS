@@ -1,0 +1,4 @@
+interface:
+  display_name: "macOS Widget Reinstall"
+  short_description: "Replace a stale macOS desktop widget with its current extension."
+  default_prompt: "Use $macos-widget-reinstall to remove and add back a macOS desktop widget after updating its app or extension."

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Likeminded Profile and Soulmate"
+  short_description: "Create images with the Likeminded Profile and Soulmate template"
+  icon_large: "./assets/preview.png"
+  default_prompt: "Use $artifact-template-likeminded-profile-and-soulmate to create an image with this template."
+policy:
+  allow_implicit_invocation: true

@@ -98,10 +98,15 @@ def chain_action(state: dict[str, Any] | None, mode: str) -> str:
     handoff = state.get("handoff") or {}
     if state.get("status") == "awaiting_authority":
         return "await-operator-authority"
+    if state.get("status") == "proof_blocked":
+        return "resume-proof-campaign"
     if state.get("status") == "blocked":
         return "review-closed-chain"
     if state.get("status") == "active" and handoff.get("claimed_at"):
         return "recover-claimed-handoff"
+    pending = state.get("pending_command") or {}
+    if state.get("status") == "active" and pending and not pending.get("consumed_at"):
+        return "execute-pending-command"
     if mode == "review-checkpoint":
         return "review-current-owner"
     status = state.get("status")
@@ -131,6 +136,7 @@ def chain_recovery(
     if not state:
         return None
     handoff = state.get("handoff") or {}
+    pending = state.get("pending_command") or {}
     if handoff.get("claimed_at"):
         objective = handoff.get("next_goal_objective") or state.get("goal_objective")
         goal_file = None
@@ -143,7 +149,13 @@ def chain_recovery(
             "goal_file": None if goal_file is None else str(goal_file),
             "goal_hash": state.get("goal_hash"),
             "delivery_unit": handoff.get("next_delivery_unit"),
-            "first_command": handoff.get("first_command"),
+            "first_command": (
+                None if pending.get("consumed_at") else pending.get("command") or handoff.get("first_command")
+            ),
+            "first_command_hash": pending.get("command_hash") or handoff.get("first_command_hash"),
+            "first_command_action": (
+                "already-consumed" if pending.get("consumed_at") else "execute-once"
+            ),
         }
     if state.get("status") == "awaiting_authority":
         objective = state.get("goal_objective")
@@ -156,6 +168,32 @@ def chain_recovery(
             "goal_file": None if goal_file is None else str(goal_file),
             "goal_hash": state.get("goal_hash"),
             **(state.get("authority") or {}),
+        }
+    if state.get("status") == "proof_blocked":
+        objective = state.get("goal_objective")
+        goal_file = None
+        if objective:
+            goal_file = Path(workspace["paths"]["claimed-goal"])
+            atomic_text(goal_file, canonical_objective(objective))
+        return {
+            "kind": "proof-pause",
+            "goal_file": None if goal_file is None else str(goal_file),
+            "goal_hash": state.get("goal_hash"),
+            **(state.get("proof_blocker") or {}),
+        }
+    if pending and not pending.get("consumed_at"):
+        objective = state.get("goal_objective")
+        goal_file = None
+        if objective:
+            goal_file = Path(workspace["paths"]["claimed-goal"])
+            atomic_text(goal_file, canonical_objective(objective))
+        return {
+            "kind": "pending-command",
+            "goal_file": None if goal_file is None else str(goal_file),
+            "goal_hash": state.get("goal_hash"),
+            "first_command": pending.get("command"),
+            "first_command_hash": pending.get("command_hash"),
+            "first_command_action": "execute-once",
         }
     if action == "recover-orphaned-chain":
         rebuild = workspace.get("program_action") == "rebuild-plan"
@@ -193,6 +231,8 @@ def exploration_route(
     if chain_action_name in {
         "recover-claimed-handoff",
         "await-operator-authority",
+        "resume-proof-campaign",
+        "execute-pending-command",
         "review-active-chain",
         "review-closed-chain",
     }:
@@ -223,9 +263,7 @@ def exploration_route(
         "action": action,
         "reason": reason,
         "decision_owner": "main-agent",
-        "agent_type": "explorer",
-        "agent_config_owner": "~/.codex/agents/explorer.toml",
-        "spawn_policy": "conditional",
+        "delegation_candidate": True,
         "constraints": [
             "read-only",
             "use deterministic owner reads first",
@@ -233,6 +271,45 @@ def exploration_route(
             "collect existing result before retry",
             "no recursive codex exec fallback",
         ],
+    }
+
+
+def execution_route(exploration: dict[str, Any]) -> dict[str, Any]:
+    candidate = bool(exploration.get("delegation_candidate"))
+    return {
+        "decision": "gate-required" if candidate else "direct",
+        "default": "direct",
+        "reason": exploration.get("reason"),
+        "lane_owner": "codex-routing-policy",
+        "agent_type_owner": "subagent-playbook",
+        "efficiency_owner": "codex-efficient-delegation",
+        "successor_owner": "session-orchestrate",
+        "constraints": [
+            "do not delegate one or two deterministic steps",
+            "do not delegate the immediate blocking decision",
+            "do not duplicate main-thread retrieval",
+            "use complete outcomes instead of checklist microtasks",
+            "a successor is continuity transfer, not subagent delegation",
+        ],
+    }
+
+
+def session_rebuild_policy(workspace: dict[str, Any]) -> dict[str, Any]:
+    rebuild = workspace.get("program_action") == "rebuild-plan"
+    return {
+        "action": "rebuild-derived-projections-in-place" if rebuild else "none",
+        "delete_session_allowed": False,
+        "stale_reasons": workspace.get("stale_reasons") or [],
+        "preserve": [
+            ".session/CURRENT.md",
+            ".session/ORCHESTRATION.json",
+            ".session/ADMITTED_GOAL.md",
+            ".session/CLAIMED_GOAL.md",
+        ],
+        "regenerate": [
+            ".session/TRACKING.json",
+            ".session/PLAN.md",
+        ] if rebuild else [],
     }
 
 
@@ -247,6 +324,10 @@ def orchestration_action(mode: str, chain: str, workspace: dict[str, Any]) -> st
         return "claim-pending-handoff"
     if chain == "await-operator-authority":
         return "await-operator-authority"
+    if chain == "resume-proof-campaign":
+        return "resume-proof-campaign"
+    if chain == "execute-pending-command":
+        return "execute-pending-command"
     if chain == "review-closed-chain":
         return "review-closed-chain"
     if chain == "review-active-chain":
@@ -270,16 +351,17 @@ def orchestration_action(mode: str, chain: str, workspace: dict[str, Any]) -> st
 
 
 REFERENCE_SECTIONS = {
-    "review-current-owner": ["Entry lane", "Negative scenarios"],
-    "rebuild-program-map": ["Source precedence", "Build the program map"],
+    "review-current-owner": ["Operator DNA", "Entry lane", "Negative scenarios"],
+    "rebuild-program-map": ["Source precedence", "Operator DNA", "Build the program map"],
     "resume-exact-goal": ["Entry lane", "Closeout lane"],
-    "admission-probe-selected-goal": ["Choose and start one session goal"],
-    "rerun-selection-probe": ["Choose and start one session goal"],
+    "admission-probe-selected-goal": ["Operator DNA", "Choose and start one session goal"],
+    "rerun-selection-probe": ["Operator DNA", "Choose and start one session goal"],
     "review-blocked-goal": ["Negative scenarios", "Mechanical stop"],
     "review-closed-chain": ["Closed chain review"],
-    "review-active-goal": ["Active chain review"],
+    "review-active-goal": ["Operator DNA", "Active chain review"],
     "revalidate-claimed-handoff": ["Source precedence"],
-    "verify-product-completion": ["Outcome contract", "Negative scenarios"],
+    "resume-proof-campaign": ["Proof campaign pause"],
+    "verify-product-completion": ["Operator DNA", "Outcome contract", "Negative scenarios"],
 }
 
 
@@ -290,8 +372,11 @@ def route_receipt(
     inspection: dict[str, Any],
     state: dict[str, Any] | None,
     recovery: dict[str, Any] | None,
+    exploration: dict[str, Any],
 ) -> dict[str, Any]:
     sections = REFERENCE_SECTIONS.get(action, [])
+    execution = execution_route(exploration)
+    rebuild = session_rebuild_policy(workspace)
     identity = {
         "action": action,
         "chain_action": chain_action_name,
@@ -303,6 +388,11 @@ def route_receipt(
         "program_policy_version": workspace.get("program_policy_version"),
         "selected_goal_id": workspace.get("selected_goal_id"),
         "stale_reasons": workspace.get("stale_reasons") or [],
+        "pending_command_hash": None if not state else (state.get("pending_command") or {}).get("command_hash"),
+        "pending_command_consumed_at": None if not state else (state.get("pending_command") or {}).get("consumed_at"),
+        "proof_blocker_fingerprint": None if not state else (state.get("proof_blocker") or {}).get("blocker_fingerprint"),
+        "execution_route": execution,
+        "session_rebuild_action": rebuild["action"],
     }
     digest = hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -312,7 +402,16 @@ def route_receipt(
         "action": action,
         "goal_file": (recovery or {}).get("goal_file") or inspection.get("goal_file"),
         "current_goal_id": None if not state else state.get("goal_id"),
-        "first_command": (recovery or {}).get("first_command") or inspection.get("first_command"),
+        "first_command": (
+            recovery.get("first_command") if recovery is not None else inspection.get("first_command")
+        ),
+        "first_command_hash": (recovery or {}).get("first_command_hash"),
+        "first_command_action": (recovery or {}).get("first_command_action"),
+        "proof_blocker": (
+            recovery if (recovery or {}).get("kind") == "proof-pause" else None
+        ),
+        "execution_route": execution,
+        "session_rebuild": rebuild,
         "reference_sections": sections,
         "reference_command": None if not sections else (
             f"python3 {HERE / 'workflow_slice.py'} --action {action}"
@@ -333,6 +432,8 @@ def route_receipt(
             "selector target changed",
             "chain state changed",
             "checkpoint eligibility changed",
+            "pending command consumption changed",
+            "proof blocker or proof environment changed",
         ],
         "evidence_budget": {
             "inline_chars": 12000,
@@ -408,6 +509,10 @@ def main() -> int:
         invocation_authority = "closed-chain-review"
     elif action == "await-operator-authority":
         invocation_authority = "authority-pause"
+    elif action == "resume-proof-campaign":
+        invocation_authority = "proof-campaign-pause"
+    elif action == "execute-pending-command":
+        invocation_authority = "active-command-recovery"
     else:
         invocation_authority = {
             "resume-exact-goal": "saved-goal-only",
@@ -415,6 +520,7 @@ def main() -> int:
             "review-checkpoint": "orchestration-only",
         }[mode]
 
+    exploration = exploration_route(workspace, inspection, action)
     output = {
         **inspection,
         "invocation_authority": invocation_authority,
@@ -428,10 +534,11 @@ def main() -> int:
             inspection,
             state,
             recovery,
+            exploration,
         ),
         "workspace": workspace,
         "project_inventory": inventory,
-        "exploration": exploration_route(workspace, inspection, action),
+        "exploration": exploration,
         "chain": None if not state else {
             "chain_id": state.get("chain_id"),
             "status": state.get("status"),

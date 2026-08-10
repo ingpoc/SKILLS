@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apple Developer"
+  short_description: "Configure Apple signing and distribution"
+  default_prompt: "Use $apple-developer to configure signing, capabilities, and release readiness for this Apple app."

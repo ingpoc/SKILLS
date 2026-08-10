@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create DESIGN.md"
+  short_description: "Define app design philosophy and build handoffs"
+  default_prompt: "Use $create-design-md to create or refine this app’s canonical DESIGN.md, resolve only material experience decisions, and add concise build handoffs for critical journeys without prescribing implementation."

@@ -49,7 +49,7 @@ Use `project-governance-bootstrap` when the user wants organization-layer govern
 ## Preferred Command
 
 ```bash
-python3 /Users/gurusharan/.codex/skills/repo-readiness-bootstrap/scripts/report.py \
+python3 "$HOME/.codex/skills/repo-readiness-bootstrap/scripts/report.py" \
   --repo /abs/path/to/repo \
   --output-dir /abs/path/to/repo/artifacts/readiness/current \
   --serve \

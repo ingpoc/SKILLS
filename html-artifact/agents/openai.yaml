@@ -1,4 +1,0 @@
-interface:
-  display_name: "HTML Artifact"
-  short_description: "Create self-contained HTML deliverables"
-  default_prompt: "Use $html-artifact to turn this into a self-contained HTML report."

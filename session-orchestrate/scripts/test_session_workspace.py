@@ -292,6 +292,27 @@ class SessionWorkspaceTests(unittest.TestCase):
         canonical_paths(self.root)["plan"].write_text("manual edit\n", encoding="utf-8")
         self.assertIn("plan_projection_modified", workspace_status(self.root)["stale_reasons"])
 
+    def test_sync_rebuilds_projections_without_deleting_transaction_state(self) -> None:
+        ensure_workspace(self.root)
+        paths = canonical_paths(self.root)
+        preserved = {
+            paths["current"]: "exact checkpoint\n",
+            paths["orchestration"]: '{"exact": "chain"}\n',
+            paths["claimed-goal"]: "exact claimed goal\n",
+            paths["session"] / "ADMITTED_GOAL.md": "exact admitted goal\n",
+        }
+        for path, content in preserved.items():
+            path.write_text(content, encoding="utf-8")
+
+        output = sync_program(self.root, self.write_program(self.program()))
+
+        self.assertEqual(output["program_action"], "use-plan")
+        for path, content in preserved.items():
+            self.assertEqual(path.read_text(encoding="utf-8"), content)
+        self.assertIn("Build the foundation", paths["plan"].read_text(encoding="utf-8"))
+        tracking = json.loads(paths["tracking"].read_text(encoding="utf-8"))
+        self.assertEqual(tracking["selected_goal_id"], "foundation")
+
     def test_completed_goal_requires_evidence(self) -> None:
         ensure_workspace(self.root)
         with self.assertRaisesRegex(ValueError, "completed goal requires evidence"):

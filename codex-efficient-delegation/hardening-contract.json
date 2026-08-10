@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "name": "codex-efficient-delegation",
+  "cwd": ".",
+  "source_paths": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "references/experiment-contract.md",
+    "scripts/summarize_experiment.py",
+    "tests/test_summarize_experiment.py",
+    "hardening-contract.json"
+  ],
+  "ignore_parts": ["__pycache__"],
+  "steps": [
+    {
+      "name": "skill-validation",
+      "command": [
+        "python3",
+        "../.system/skill-creator/scripts/quick_validate.py",
+        "."
+      ],
+      "timeout_seconds": 30,
+      "budget_seconds": 2,
+      "fail_patterns": ["Traceback", "invalid", "ERROR:"]
+    },
+    {
+      "name": "experiment-self-test",
+      "command": ["python3", "scripts/summarize_experiment.py", "--self-test"],
+      "timeout_seconds": 30,
+      "budget_seconds": 2,
+      "fail_patterns": ["Traceback", "error", "FAILED"]
+    },
+    {
+      "name": "experiment-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ],
+      "timeout_seconds": 30,
+      "budget_seconds": 2,
+      "fail_patterns": ["Traceback", "FAILED \\(", "ERROR:"]
+    }
+  ],
+  "cleanup": {
+    "command": ["python3", "-c", "raise SystemExit(0)"],
+    "timeout_seconds": 10
+  },
+  "ledger_path": "~/.cache/elon-algorithm/codex-efficient-delegation/ledger.json"
+}

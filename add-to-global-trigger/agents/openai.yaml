@@ -1,4 +1,0 @@
-interface:
-  display_name: "Add To Global Trigger"
-  short_description: "Add global trigger routing safely"
-  default_prompt: "Use this skill to decide whether a requested global trigger addition belongs in global AGENTS.md, a global workflow/reference doc, workflow.py alias registration, or an enforceable non-prose surface, then make the change in the correct order with the required validation."

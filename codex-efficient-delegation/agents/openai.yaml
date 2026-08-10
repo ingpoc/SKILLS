@@ -1,0 +1,4 @@
+interface:
+  display_name: "Efficient Codex Delegation"
+  short_description: "Tune bounded subagents and complete outcome reviews"
+  default_prompt: "Use $codex-efficient-delegation to decide, run, and measure bounded evidence sidecars or complete role-based outcome reviews without polluting the main thread."

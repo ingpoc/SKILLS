@@ -1,4 +1,0 @@
-interface:
-  display_name: "Project Governance Bootstrap"
-  short_description: "Bootstrap Linear, Notion, docs, and AGENTS governance"
-  default_prompt: "Use $project-governance-bootstrap to set up governance, Linear, Notion, and workflow docs for this project."

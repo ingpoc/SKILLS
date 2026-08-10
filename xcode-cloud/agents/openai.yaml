@@ -1,0 +1,4 @@
+interface:
+  display_name: "Xcode Cloud"
+  short_description: "Configure safe Apple CI/CD and TestFlight delivery"
+  default_prompt: "Use $xcode-cloud to design, configure, and verify an Xcode Cloud workflow without conflating build, upload, TestFlight, or device acceptance."

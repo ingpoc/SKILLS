@@ -82,7 +82,7 @@ SAVE_SESSION_BLOCKERS="None." \
 SAVE_SESSION_LEARNINGS="Recent-file inference polluted checkpoints with cache/db artifacts; require curated relevant files instead." \
 SAVE_SESSION_VERIFICATION_STATE="Wrapper patched; validation still pending." \
 SAVE_SESSION_INTROSPECTION="session-introspection: prevent future noisy checkpoints by preferring curated handoff fields over filesystem recency." \
-SAVE_SESSION_RELEVANT_FILES=$'/Users/gurusharan/.codex/skills/save-session/SKILL.md\n/Users/gurusharan/.local/bin/save-session' \
+SAVE_SESSION_RELEVANT_FILES="$(printf '%s\n' "$HOME/.codex/skills/save-session/SKILL.md" "$HOME/.local/bin/save-session")" \
 SAVE_SESSION_AVOID="Do not include cache files, generated DB files, broad untracked status, or historical discussion not needed for the next action." \
 save-session
 ```

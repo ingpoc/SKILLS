@@ -234,9 +234,27 @@ class SessionOrchestrateTests(unittest.TestCase):
     def test_workflow_slice_is_bounded_to_the_entry_route(self) -> None:
         selected = render_workflow_slice("admission-probe-selected-goal")
         full = (HERE.parent / "references" / "workflow.md").read_text(encoding="utf-8")
+        self.assertIn("## Operator DNA", selected)
         self.assertIn("## Choose and start one session goal", selected)
+        self.assertIn("### Freeze before expensive acceptance", selected)
         self.assertNotIn("## Build the program map", selected)
         self.assertLess(len(selected), len(full) // 2)
+
+        deterministic = render_workflow_slice("resume-proof-campaign")
+        self.assertNotIn("## Operator DNA", deterministic)
+        self.assertIn("### Proof campaign pause", deterministic)
+
+    def test_successor_authority_is_explicit_and_bounded(self) -> None:
+        skill = (HERE.parent / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (HERE.parent / "references" / "workflow.md").read_text(encoding="utf-8")
+        interface = (HERE.parent / "agents" / "openai.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("explicit request required to create one eligible same-project successor", skill)
+        self.assertIn("Do not request separate confirmation", workflow)
+        self.assertIn("codex_app__create_thread", workflow)
+        self.assertIn("leave the chain `handoff_pending`", workflow)
+        self.assertIn("do not prepare or create a duplicate successor", workflow)
+        self.assertIn("create exactly one eligible same-project successor", interface)
 
     def test_goal_validator_limits_legacy_shape_to_exact_resume(self) -> None:
         legacy = goal().replace(
@@ -272,6 +290,8 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["chain_action"], "init-new-chain")
         self.assertEqual(output["orchestration_action"], "resume-exact-goal")
         self.assertEqual(output["exploration"]["action"], "skip")
+        self.assertEqual(output["route_receipt"]["execution_route"]["decision"], "direct")
+        self.assertEqual(output["route_receipt"]["session_rebuild"]["action"], "none")
         goal_file = Path(output["goal_file"])
         self.assertEqual(output["route_receipt"]["goal_file"], str(goal_file))
         self.assertEqual(goal_file.read_text(encoding="utf-8").rstrip(), objective.rstrip())
@@ -288,8 +308,20 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(output["project_inventory"]["inventory_mode"], "cheap")
         self.assertNotIn("discovery_hints", output["project_inventory"])
         self.assertEqual(output["exploration"]["action"], "first-migration")
-        self.assertEqual(output["exploration"]["agent_type"], "explorer")
-        self.assertEqual(output["exploration"]["agent_config_owner"], "~/.codex/agents/explorer.toml")
+        self.assertTrue(output["exploration"]["delegation_candidate"])
+        execution = output["route_receipt"]["execution_route"]
+        self.assertEqual(execution["decision"], "gate-required")
+        self.assertEqual(execution["lane_owner"], "codex-routing-policy")
+        self.assertEqual(execution["agent_type_owner"], "subagent-playbook")
+        self.assertEqual(execution["efficiency_owner"], "codex-efficient-delegation")
+        rebuild = output["route_receipt"]["session_rebuild"]
+        self.assertEqual(rebuild["action"], "rebuild-derived-projections-in-place")
+        self.assertFalse(rebuild["delete_session_allowed"])
+        self.assertIn(".session/ORCHESTRATION.json", rebuild["preserve"])
+        self.assertEqual(rebuild["regenerate"], [
+            ".session/TRACKING.json",
+            ".session/PLAN.md",
+        ])
         self.assertIsNone(output["goal_file"])
 
     def test_route_receipt_is_stable_until_chain_state_changes(self) -> None:
@@ -431,6 +463,10 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertIn("program_state_stale", output["reasons"])
         self.assertIn("plan_source_changed:docs/PRODUCTPLAN.md", output["workspace"]["stale_reasons"])
         self.assertEqual(output["exploration"]["action"], "stale-rebuild")
+        self.assertEqual(
+            output["route_receipt"]["session_rebuild"]["action"],
+            "rebuild-derived-projections-in-place",
+        )
         self.assertIsNone(output["goal_file"])
 
     def test_entry_reuses_active_chain(self) -> None:
@@ -631,6 +667,8 @@ class SessionOrchestrateTests(unittest.TestCase):
         next_goal.write_text(goal().replace("one bounded result", "the next bounded result"), encoding="utf-8")
         first = json.loads(self.run_state(
             "prepare-handoff", "--kind", "next-goal", "--nonce", "n1",
+            "--reason", "completed-goal", "--source-goal-state", "completed",
+            "--completion-evidence", "tests/current-goal-proof.json",
             "--next-goal-id", "next-goal", "--next-objective-file", str(next_goal),
             "--first-command", "run-next-proof",
         ).stdout)
@@ -643,6 +681,9 @@ class SessionOrchestrateTests(unittest.TestCase):
         claimed = entry["claim_receipt"]
         self.assertEqual(claimed["hop"], 2)
         self.assertEqual(claimed["kind"], "next-goal")
+        self.assertEqual(claimed["handoff_reason"], "completed-goal")
+        self.assertEqual(claimed["source_goal_state"], "completed")
+        self.assertEqual(claimed["execution_owner_thread_id"], "thread-1")
         self.assertEqual(claimed["goal_id"], "next-goal")
         self.assertNotIn("next_goal_objective", claimed)
         claimed_goal = Path(claimed["goal_file"])
@@ -676,6 +717,249 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.assertEqual(settled["goal_objective"], claimed_goal.read_text(encoding="utf-8"))
         self.assertEqual(settled["goal_id"], "next-goal")
         self.assertNotIn("next_goal_objective", settled["history"][0]["handoff"])
+
+    def test_handoff_requires_terminal_source_goal_and_typed_reason(self) -> None:
+        self.write_checkpoint("reference-only", goal())
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        self.run_state("set-goal", "--objective-file", str(self.write_goal()))
+
+        role_switch = self.run_state(
+            "prepare-handoff", "--kind", "continue-goal",
+            "--reason", "role-switch", "--source-goal-state", "paused",
+            "--first-command", "run-fixer", ok=False,
+        )
+        self.assertIn("handoff reason must be one of", role_switch.stderr)
+
+        active_source = self.run_state(
+            "prepare-handoff", "--kind", "continue-goal",
+            "--reason", "context-exhausted", "--first-command", "continue-proof", ok=False,
+        )
+        self.assertIn("source Codex goal to be paused", active_source.stderr)
+
+        next_goal = self.root / "next-goal.md"
+        next_goal.write_text(
+            goal().replace("one bounded result", "the next bounded result"),
+            encoding="utf-8",
+        )
+        missing_completion = self.run_state(
+            "prepare-handoff", "--kind", "next-goal",
+            "--reason", "completed-goal", "--source-goal-state", "completed",
+            "--next-goal-id", "next-goal", "--next-objective-file", str(next_goal),
+            "--first-command", "run-next-proof", ok=False,
+        )
+        self.assertIn("completion evidence", missing_completion.stderr)
+
+    def test_claimed_first_command_is_consumed_once_across_goal_settlement(self) -> None:
+        objective = goal()
+        self.write_checkpoint("reference-only", objective)
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        goal_path = self.write_goal()
+        self.run_state("set-goal", "--objective-file", str(goal_path))
+        self.run_state(
+            "prepare-handoff", "--kind", "continue-goal", "--nonce", "once",
+            "--reason", "context-exhausted", "--source-goal-state", "paused",
+            "--first-command", "run-exact-proof",
+        )
+        self.run_state("record-successor", "--nonce", "once", "--thread-id", "thread-once")
+        claimed = json.loads(self.run_state("claim", "--nonce", "once").stdout)
+        command_hash = claimed["first_command_hash"]
+        self.assertEqual(claimed["first_command_action"], "execute-once")
+
+        self.run_state("set-goal", "--objective-file", str(goal_path))
+        pending_entry = json.loads(self.run_entry().stdout)
+        self.assertEqual(pending_entry["chain_action"], "execute-pending-command")
+        self.assertEqual(pending_entry["orchestration_action"], "execute-pending-command")
+        self.assertEqual(pending_entry["route_receipt"]["first_command"], "run-exact-proof")
+        self.assertEqual(pending_entry["route_receipt"]["first_command_hash"], command_hash)
+
+        wrong = self.run_state(
+            "consume-command", "--command-hash", "wrong", "--result", "completed", ok=False,
+        )
+        self.assertIn("hash mismatch", wrong.stderr)
+        consumed = json.loads(self.run_state(
+            "consume-command", "--command-hash", command_hash, "--result", "completed",
+        ).stdout)
+        self.assertFalse(consumed["idempotent"])
+        repeated = json.loads(self.run_state(
+            "consume-command", "--command-hash", command_hash, "--result", "completed",
+        ).stdout)
+        self.assertTrue(repeated["idempotent"])
+
+        after = json.loads(self.run_entry().stdout)
+        self.assertIsNone(after["route_receipt"]["first_command"])
+        self.assertNotEqual(after["chain_action"], "execute-pending-command")
+        state = json.loads(self.run_state("status").stdout)
+        self.assertEqual(len(state["command_history"]), 1)
+        self.assertEqual(state["pending_command"]["command_hash"], command_hash)
+
+    def test_scoped_proof_generations_and_nonterminal_proof_pause(self) -> None:
+        objective = goal()
+        self.write_checkpoint("reference-only", objective)
+        self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
+        goal_path = self.write_goal()
+        self.run_state("set-goal", "--goal-id", "test-goal", "--objective-file", str(goal_path))
+
+        first = json.loads(self.run_state(
+            "record-proof",
+            "--scope", "customer-browser",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v1",
+            "--proof-environment-fingerprint", "browser-v1",
+            "--result", "first customer pass",
+            "--evidence", "evidence/customer-v1.json",
+        ).stdout)
+        duplicate = json.loads(self.run_state(
+            "record-proof",
+            "--scope", "customer-browser",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v1",
+            "--proof-environment-fingerprint", "browser-v1",
+            "--result", "first customer pass",
+            "--evidence", "evidence/customer-v1.json",
+        ).stdout)
+        self.assertTrue(duplicate["idempotent"])
+        self.assertEqual(first["generation_id"], duplicate["generation_id"])
+
+        second = json.loads(self.run_state(
+            "record-proof",
+            "--scope", "customer-browser",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v2",
+            "--proof-environment-fingerprint", "browser-v1",
+            "--result", "pass after source change",
+            "--evidence", "evidence/customer-v2.json",
+        ).stdout)
+        self.assertNotEqual(first["generation_id"], second["generation_id"])
+
+        paused = json.loads(self.run_state(
+            "pause-proof",
+            "--owner", "repository-browser-owner",
+            "--scope", "customer-browser",
+            "--reason", "owned browser lease disappeared",
+            "--next-command", "run-browser-owner-diagnostic",
+            "--product-fingerprint", "product-v2",
+            "--proof-environment-fingerprint", "browser-v1",
+            "--evidence", "evidence/browser-blocker.json",
+            "--recovery-used",
+        ).stdout)
+        self.assertEqual(paused["status"], "proof_blocked")
+        self.assertTrue(paused["bounded_recovery_used"])
+
+        entry = json.loads(self.run_entry().stdout)
+        self.assertEqual(entry["chain_action"], "resume-proof-campaign")
+        self.assertEqual(entry["orchestration_action"], "resume-proof-campaign")
+        self.assertEqual(entry["exploration"]["action"], "skip")
+        self.assertIsNone(entry["route_receipt"]["first_command"])
+        self.assertEqual(
+            entry["route_receipt"]["proof_blocker"]["next_command"],
+            "run-browser-owner-diagnostic",
+        )
+
+        resumed = json.loads(self.run_state(
+            "resume-proof", "--reason", "proof owner repaired and verified",
+        ).stdout)
+        self.assertEqual(resumed["status"], "active")
+        self.assertEqual(resumed["first_command_action"], "execute-once")
+        recovery_entry = json.loads(self.run_entry().stdout)
+        self.assertEqual(recovery_entry["chain_action"], "execute-pending-command")
+        self.assertEqual(
+            recovery_entry["route_receipt"]["first_command"],
+            "run-browser-owner-diagnostic",
+        )
+        self.run_state(
+            "consume-command",
+            "--command-hash", resumed["first_command_hash"],
+            "--result", "completed",
+        )
+
+        final = json.loads(self.run_state(
+            "record-proof",
+            "--scope", "customer-browser",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v2",
+            "--proof-environment-fingerprint", "browser-v2",
+            "--result", "customer pass after proof-owner repair",
+            "--evidence", "evidence/customer-v2-browser-v2.json",
+        ).stdout)
+        state = json.loads(self.run_state("status").stdout)
+        self.assertEqual(state["hop"], 1)
+        self.assertEqual(len(state["proof_history"]), 1)
+        self.assertEqual(state["proof_current"]["customer-browser"], final["generation_id"])
+        self.assertEqual(len(state["proof_generations"]), 4)
+        self.assertEqual(state["proof_generations"][0]["superseded_by"], second["generation_id"])
+
+    def test_final_acceptance_requires_frozen_contract_and_immutable_artifact_root(self) -> None:
+        self.run_state("init", "--max-hops", "1", "--phase-boundary", "Acceptance")
+        goal_path = self.write_goal()
+        self.run_state("set-goal", "--goal-id", "test-goal", "--objective-file", str(goal_path))
+
+        missing = self.run_state(
+            "record-proof",
+            "--scope", "customer-review",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v1",
+            "--result", "blind review passed",
+            "--evidence", "output/acceptance/product-v1/review.json",
+            "--final-acceptance",
+            ok=False,
+        )
+        self.assertIn("requires freeze-proof readiness", missing.stderr)
+
+        frozen = json.loads(self.run_state(
+            "freeze-proof",
+            "--product-fingerprint", "product-v1",
+            "--acceptance-contract", "owner plan: profile acceptance",
+            "--proof-owner", "repo customer-review route",
+            "--artifact-root", "output/acceptance/product-v1",
+            "--evidence", "tests/proof-contract-review.json",
+        ).stdout)
+        self.assertFalse(frozen["idempotent"])
+
+        wrong_root = self.run_state(
+            "record-proof",
+            "--scope", "customer-review",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v1",
+            "--result", "blind review passed",
+            "--evidence", "output/latest/review.json",
+            "--final-acceptance",
+            ok=False,
+        )
+        self.assertIn("frozen artifact root", wrong_root.stderr)
+
+        first = json.loads(self.run_state(
+            "record-proof",
+            "--scope", "customer-review",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v1",
+            "--result", "blind review passed",
+            "--evidence", "output/acceptance/product-v1/review.json",
+            "--final-acceptance",
+        ).stdout)
+        self.assertTrue(first["final_acceptance"])
+
+        self.run_state(
+            "freeze-proof",
+            "--product-fingerprint", "product-v2",
+            "--acceptance-contract", "owner plan: profile acceptance",
+            "--proof-owner", "repo customer-review route",
+            "--artifact-root", "output/acceptance/product-v2",
+            "--evidence", "tests/proof-contract-review-v2.json",
+        )
+        self.run_state(
+            "record-proof",
+            "--scope", "customer-review",
+            "--proof-status", "pass",
+            "--product-fingerprint", "product-v2",
+            "--result", "blind review passed after one batched fix",
+            "--evidence", "output/acceptance/product-v2/review.json",
+            "--final-acceptance",
+        )
+        state = json.loads(self.run_state("status").stdout)
+        self.assertEqual(state["metrics"]["source_freezes"], 2)
+        self.assertEqual(state["metrics"]["post_freeze_source_mutations"], 1)
+        self.assertEqual(state["metrics"]["review_cycles"], 2)
+        self.assertEqual(state["metrics"]["proof_reruns"], 1)
 
     def test_authority_pause_preserves_and_reactivates_the_same_goal(self) -> None:
         self.write_checkpoint("ensure-active", goal())
@@ -736,7 +1020,10 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.run_state("init", "--max-hops", "3", "--phase-boundary", "Phase 5")
         self.run_state("set-goal", "--objective-file", str(self.write_goal()))
         missing = self.run_state(
-            "prepare-handoff", "--kind", "next-goal", "--first-command", "run-next-proof", ok=False,
+            "prepare-handoff", "--kind", "next-goal",
+            "--reason", "completed-goal", "--source-goal-state", "completed",
+            "--completion-evidence", "tests/current-goal-proof.json",
+            "--first-command", "run-next-proof", ok=False,
         )
         self.assertIn("requires --next-objective-file", missing.stderr)
 
@@ -744,6 +1031,8 @@ class SessionOrchestrateTests(unittest.TestCase):
         tiny.write_text("## Outcome\nInspect existing work.\n", encoding="utf-8")
         rejected = self.run_state(
             "prepare-handoff", "--kind", "next-goal", "--next-goal-id", "tiny-next",
+            "--reason", "completed-goal", "--source-goal-state", "completed",
+            "--completion-evidence", "tests/current-goal-proof.json",
             "--next-objective-file", str(tiny),
             "--first-command", "inspect", ok=False,
         )
@@ -757,6 +1046,8 @@ class SessionOrchestrateTests(unittest.TestCase):
         next_goal.write_text(goal().replace("one bounded result", "the next bounded result"), encoding="utf-8")
         self.run_state(
             "prepare-handoff", "--kind", "next-goal", "--nonce", "stale-nonce",
+            "--reason", "completed-goal", "--source-goal-state", "completed",
+            "--completion-evidence", "tests/current-goal-proof.json",
             "--next-goal-id", "next-goal", "--next-objective-file", str(next_goal),
             "--first-command", "run-next-proof",
         )
@@ -775,6 +1066,7 @@ class SessionOrchestrateTests(unittest.TestCase):
         self.run_state("set-goal", "--objective-file", str(self.write_goal()))
         self.run_state(
             "prepare-handoff", "--kind", "continue-goal", "--nonce", "right",
+            "--reason", "compaction-boundary", "--source-goal-state", "paused",
             "--first-command", "continue-proof",
         )
         self.run_state("record-successor", "--nonce", "right", "--thread-id", "thread-1")

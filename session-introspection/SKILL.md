@@ -79,7 +79,7 @@ Prefer the narrowest effective control:
 3. If the friction may be harness-level or recurring, run:
 
    ```bash
-   python3 /Users/gurusharan/.codex/skills/session-introspection/scripts/mine_harness_friction.py --cwd "$PWD" --limit 12
+   python3 "$HOME/.codex/skills/session-introspection/scripts/mine_harness_friction.py" --cwd "$PWD" --limit 12
    ```
 
    If a current transcript path is available from hook payload or session metadata, add `--current-transcript <path>`.
